@@ -90,7 +90,7 @@ pub fn render(
         .join(", ");
 
     let title = format!(
-        " slack9s \u{2014} {} (every {}, {} window) ",
+        " slack9 \u{2014} {} (every {}, {} window) ",
         channel_list, config.poll_interval, config.time_window,
     );
 

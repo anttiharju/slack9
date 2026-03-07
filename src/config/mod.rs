@@ -49,7 +49,7 @@ impl Config {
 
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Config (~/.slack9s.toml):")?;
+        writeln!(f, "Config (~/.slack9.toml):")?;
         writeln!(
             f,
             "  workspace_url: {}",
@@ -122,5 +122,5 @@ pub fn load() -> Config {
 
 fn config_path() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").map_err(|_| "Could not determine home directory".to_string())?;
-    Ok(PathBuf::from(home).join(".slack9s.toml"))
+    Ok(PathBuf::from(home).join(".slack9.toml"))
 }

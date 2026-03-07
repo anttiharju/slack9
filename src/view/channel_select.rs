@@ -67,7 +67,7 @@ pub fn render(
     let list = List::new(items)
         .block(
             Block::default()
-                .title(" slack9s \u{2014} select channel ")
+                .title(" slack9 \u{2014} select channel ")
                 .title_bottom(" enter: select | :q to quit ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(list_border_color))

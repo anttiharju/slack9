@@ -1,6 +1,6 @@
-# slack9s
+# slack9
 
-`slack9s` is a template for my Rust projects to make it easier to start new ones.
+`slack9` is a template for my Rust projects to make it easier to start new ones.
 
 ## How to acquire xoxd and xoxc tokens
 
@@ -33,12 +33,12 @@ Assumes you use direnv.
 ```sh
 #!/usr/bin/env bash
 
-export SLACK9S_WORKSPACE=https://foo.slack.com
+export SLACK9_WORKSPACE=https://foo.slack.com
 
 # consider 1Password CLI for safe storage if you have it
-export SLACK9S_XOXC=xoxc-bar
-export SLACK9S_XOXD=xoxd-baz
+export SLACK9_XOXC=xoxc-bar
+export SLACK9_XOXD=xoxd-baz
 ```
 
 2. `direnv allow`
-3. `slack9s`
+3. `slack9`

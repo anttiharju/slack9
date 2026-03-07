@@ -24,21 +24,21 @@ fn main() {
         std::process::exit(exitcode::invalid_poll_interval());
     });
 
-    let workspace_url = env::var("SLACK9S_WORKSPACE").unwrap_or_else(|_| {
+    let workspace_url = env::var("SLACK9_WORKSPACE").unwrap_or_else(|_| {
         if !config.workspace_url.is_empty() {
             return config.workspace_url.clone();
         }
-        eprintln!("Error: SLACK9S_WORKSPACE environment variable not set");
+        eprintln!("Error: SLACK9_WORKSPACE environment variable not set");
         std::process::exit(exitcode::missing_workspace());
     });
 
-    let xoxd = env::var("SLACK9S_XOXD").unwrap_or_else(|_| {
-        eprintln!("Error: SLACK9S_XOXD environment variable not set");
+    let xoxd = env::var("SLACK9_XOXD").unwrap_or_else(|_| {
+        eprintln!("Error: SLACK9_XOXD environment variable not set");
         std::process::exit(exitcode::missing_xoxd());
     });
 
-    let xoxc = env::var("SLACK9S_XOXC").unwrap_or_else(|_| {
-        eprintln!("Error: SLACK9S_XOXC environment variable not set");
+    let xoxc = env::var("SLACK9_XOXC").unwrap_or_else(|_| {
+        eprintln!("Error: SLACK9_XOXC environment variable not set");
         std::process::exit(exitcode::missing_xoxc());
     });
 
