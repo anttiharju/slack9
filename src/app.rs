@@ -325,7 +325,7 @@ impl App {
     fn track(&mut self, mut source: MessageSource) -> TrackResult {
         let mut messages: Vec<TrackedMessage> = Vec::new();
         let mut seen: HashMap<String, usize> = HashMap::new();
-        let mut last_poll: Option<Instant> = None;
+        let mut last_poll: Option<Instant>;
         let mut list_state = ListState::default();
         let mut pending_g: Option<char> = None;
         let mut count_buf: u32 = 0;
