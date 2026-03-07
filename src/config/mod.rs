@@ -6,8 +6,6 @@ use std::time::Duration;
 
 #[derive(Debug, Default, Deserialize)]
 pub struct Config {
-    #[serde(default)]
-    pub workspace_url: String,
     #[serde(default = "default_time_window")]
     pub time_window: String,
     #[serde(default = "default_poll_interval")]
@@ -35,15 +33,6 @@ impl Config {
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Config (~/.slack9.toml):")?;
-        writeln!(
-            f,
-            "  workspace_url: {}",
-            if self.workspace_url.is_empty() {
-                "(not set)"
-            } else {
-                &self.workspace_url
-            }
-        )?;
         writeln!(f, "  time_window: {}", self.time_window)?;
         write!(f, "  poll_interval: {}", self.poll_interval)?;
         Ok(())

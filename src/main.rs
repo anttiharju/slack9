@@ -25,9 +25,6 @@ fn main() {
     });
 
     let workspace_url = env::var("SLACK9_WORKSPACE").unwrap_or_else(|_| {
-        if !config.workspace_url.is_empty() {
-            return config.workspace_url.clone();
-        }
         eprintln!("Error: SLACK9_WORKSPACE environment variable not set");
         std::process::exit(exitcode::missing_workspace());
     });

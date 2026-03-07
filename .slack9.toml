@@ -1,3 +1,2 @@
-workspace_url = "https://personal-j6s3142.slack.com"
 time_window = "24h"
 poll_interval = "10s"
