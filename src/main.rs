@@ -7,9 +7,10 @@ use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
+use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, Padding};
+use ratatui::widgets::{Block, Borders, List, ListItem, Padding, Paragraph};
 use std::collections::HashMap;
 use std::env;
 use std::io;
@@ -121,15 +122,39 @@ fn main() {
     let mut messages: Vec<TrackedMessage> = Vec::new();
     let mut seen: HashMap<String, usize> = HashMap::new();
     let mut last_poll: Option<Instant> = None;
+    let mut command_buf: Option<String> = None;
 
     loop {
         if event::poll(Duration::from_millis(100)).unwrap_or(false)
             && let Ok(Event::Key(key)) = event::read()
-            && key.kind == KeyEventKind::Press
-            && key.code == KeyCode::Char('q')
-        {
-            break;
-        }
+                && key.kind == KeyEventKind::Press {
+                    if let Some(ref mut buf) = command_buf {
+                        match key.code {
+                            KeyCode::Enter => {
+                                let cmd = buf.trim().to_string();
+                                command_buf = None;
+                                if cmd == "q" {
+                                    break;
+                                }
+                            }
+                            KeyCode::Esc => {
+                                command_buf = None;
+                            }
+                            KeyCode::Backspace => {
+                                buf.pop();
+                                if buf.is_empty() {
+                                    command_buf = None;
+                                }
+                            }
+                            KeyCode::Char(c) => {
+                                buf.push(c);
+                            }
+                            _ => {}
+                        }
+                    } else if key.code == KeyCode::Char(':') {
+                        command_buf = Some(String::new());
+                    }
+                }
 
         if last_poll.is_none_or(|t| t.elapsed() >= poll_interval) {
             last_poll = Some(Instant::now());
@@ -165,8 +190,41 @@ fn main() {
             }
         }
 
+        let command_buf_snapshot = command_buf.clone();
         terminal
             .draw(|frame| {
+                let area = frame.area();
+                let in_command_mode = command_buf_snapshot.is_some();
+
+                let chunks = if in_command_mode {
+                    Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Length(3), Constraint::Min(1), Constraint::Length(1)])
+                        .split(area)
+                } else {
+                    Layout::default()
+                        .direction(Direction::Vertical)
+                        .constraints([Constraint::Min(1), Constraint::Length(1)])
+                        .split(area)
+                };
+
+                let (cmd_block_area, list_area, status_area) = if in_command_mode {
+                    (Some(chunks[0]), chunks[1], chunks[2])
+                } else {
+                    (None, chunks[0], chunks[1])
+                };
+
+                if let Some(cmd_area) = cmd_block_area {
+                    let buf = command_buf_snapshot.as_deref().unwrap_or("");
+                    let cmd_paragraph = Paragraph::new(Line::from(vec![Span::raw(":"), Span::raw(buf)])).block(
+                        Block::default()
+                            .title(" command ")
+                            .borders(Borders::ALL)
+                            .padding(Padding::new(1, 1, 0, 0)),
+                    );
+                    frame.render_widget(cmd_paragraph, cmd_area);
+                }
+
                 let items: Vec<ListItem> = messages
                     .iter()
                     .filter(|m| m.status != Status::Completed)
@@ -196,12 +254,15 @@ fn main() {
                 let list = List::new(items).block(
                     Block::default()
                         .title(title)
-                        .title_bottom(" q: quit ")
+                        .title_bottom(" :q to quit ")
                         .borders(Borders::ALL)
                         .padding(Padding::new(1, 1, 0, 0)),
                 );
 
-                frame.render_widget(list, frame.area());
+                frame.render_widget(list, list_area);
+
+                let status_line = if in_command_mode { Paragraph::new("") } else { Paragraph::new("") };
+                frame.render_widget(status_line, status_area);
             })
             .expect("failed to draw");
     }
