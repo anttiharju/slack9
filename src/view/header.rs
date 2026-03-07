@@ -25,7 +25,7 @@ fn wave_level_at(d: usize) -> usize {
     7_usize.saturating_sub(d)
 }
 
-pub fn render(frame: &mut Frame, area: Rect, poll_interval: Option<Duration>, poll_elapsed: Option<Duration>) {
+pub fn render(frame: &mut Frame, area: Rect, poll_interval: Option<Duration>, poll_elapsed: Option<Duration>, poll_label: Option<&str>) {
     let logo_width = SMALL_LOGO.lines().map(|l| l.len()).max().unwrap_or(0) as u16;
     let lines: Vec<Line> = SMALL_LOGO
         .lines()
@@ -38,6 +38,14 @@ pub fn render(frame: &mut Frame, area: Rect, poll_interval: Option<Duration>, po
 
     let paragraph = Paragraph::new(lines);
     frame.render_widget(paragraph, logo_area);
+
+    // Poll interval label in top-left
+    if let Some(label) = poll_label {
+        let text = format!("poll {}", label);
+        let label_line = Line::from(Span::styled(text, Style::default().fg(Color::DarkGray)));
+        let label_area = Rect::new(area.x, area.y, area.width.saturating_sub(logo_width + 1), 1);
+        frame.render_widget(Paragraph::new(label_line), label_area);
+    }
 
     // Poll progress bar under the logo, same width
     if let Some(interval) = poll_interval {

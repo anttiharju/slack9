@@ -33,7 +33,13 @@ pub fn render(
         .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Min(1)])
         .split(area);
 
-    header::render(frame, outer[0], Some(poll_interval), poll_elapsed);
+    header::render(
+        frame,
+        outer[0],
+        Some(poll_interval),
+        poll_elapsed,
+        Some(&config.poll_interval.to_string()),
+    );
     let content_area = outer[1];
 
     let chunks = if has_overlay {

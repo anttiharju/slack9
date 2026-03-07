@@ -319,6 +319,7 @@ impl App {
             let command_buf_snapshot = self.command_buf.clone();
             let all_channels = &self.all_channels;
             let user_names = &self.user_names;
+            let poll_label = self.config.poll_interval.clone();
             let filter_snap = filter.clone();
             let fe = filter_editing;
             self.terminal
@@ -333,6 +334,7 @@ impl App {
                         all_channels,
                         user_names,
                         &mut list_state,
+                        &poll_label,
                     );
                 })
                 .expect("failed to draw");

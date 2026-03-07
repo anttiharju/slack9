@@ -15,6 +15,7 @@ pub fn render(
     all_channels: &[(String, String)],
     user_names: &[String],
     list_state: &mut ListState,
+    poll_label: &str,
 ) {
     let in_command_mode = command_buf.is_some();
     let in_filter_mode = filter_editing;
@@ -25,7 +26,7 @@ pub fn render(
         .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Min(1)])
         .split(area);
 
-    header::render(frame, outer[0], None, None);
+    header::render(frame, outer[0], None, None, Some(poll_label));
     let content_area = outer[1];
 
     let chunks = if has_overlay {
