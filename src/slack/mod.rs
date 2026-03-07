@@ -85,9 +85,10 @@ pub struct Message {
 impl Message {
     pub fn timestamp(&self) -> String {
         if let Some(dot) = self.ts.find('.')
-            && let Ok(secs) = self.ts[..dot].parse::<u64>() {
-                return format_unix_timestamp(secs);
-            }
+            && let Ok(secs) = self.ts[..dot].parse::<u64>()
+        {
+            return format_unix_timestamp(secs);
+        }
         self.ts.clone()
     }
 }
