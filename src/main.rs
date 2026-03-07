@@ -1,4 +1,5 @@
 mod cli;
+mod config;
 mod exitcode;
 mod slack;
 
@@ -6,6 +7,12 @@ use std::env;
 
 fn main() {
     cli::parse_args();
+
+    let config = config::load().unwrap_or_else(|e| {
+        eprintln!("Error: {}", e);
+        std::process::exit(exitcode::config_error());
+    });
+    println!("{}", config);
 
     let xoxd = env::var("SLACKEMON_XOXD").unwrap_or_else(|_| {
         eprintln!("Error: SLACKEMON_XOXD environment variable not set");

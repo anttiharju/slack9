@@ -21,4 +21,5 @@ define_exitcodes! {
     missing_workspace_url => MissingWorkspaceUrl = 3,
     auth_rejected => AuthRejected = 4,
     request_failed => RequestFailed = 5,
+    config_error => ConfigError = 6,
 }

@@ -1,0 +1,2 @@
+channels = ["general", "random"]
+time_window = "24h"
