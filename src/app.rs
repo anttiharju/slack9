@@ -102,8 +102,23 @@ impl App {
         if !self.all_channels.is_empty() {
             list_state.select(Some(0));
         }
+        let mut filter = String::new();
+        let mut filter_editing = false;
 
         loop {
+            // Compute filtered channels for input handling
+            let filtered_channels: Vec<(usize, &(String, String))> = if filter.is_empty() {
+                self.all_channels.iter().enumerate().collect()
+            } else {
+                let q = filter.to_lowercase();
+                self.all_channels
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (_, name))| name.to_lowercase().contains(&q))
+                    .collect()
+            };
+            let filtered_count = filtered_channels.len();
+
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
                 && let Ok(Event::Key(key)) = event::read()
                 && key.kind == KeyEventKind::Press
@@ -118,9 +133,10 @@ impl App {
                             }
                             let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
                             if let Some(name) = channel_arg
-                                && let Some(ch) = self.find_channel(name) {
-                                    return SelectResult::Channel(ch.0, ch.1);
-                                }
+                                && let Some(ch) = self.find_channel(name)
+                            {
+                                return SelectResult::Channel(ch.0, ch.1);
+                            }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
                             self.command_buf = None;
@@ -139,6 +155,58 @@ impl App {
                         }
                         _ => {}
                     }
+                } else if filter_editing {
+                    match key.code {
+                        KeyCode::Enter => {
+                            filter_editing = false;
+                            // Reset selection to first item in filtered list
+                            if filtered_count > 0 {
+                                list_state.select(Some(0));
+                            } else {
+                                list_state.select(None);
+                            }
+                        }
+                        KeyCode::Esc | KeyCode::Char('\x03') => {
+                            filter.clear();
+                            filter_editing = false;
+                            // Reset selection
+                            if !self.all_channels.is_empty() {
+                                list_state.select(Some(0));
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            filter.pop();
+                            if filter.is_empty() {
+                                filter_editing = false;
+                                if !self.all_channels.is_empty() {
+                                    list_state.select(Some(0));
+                                }
+                            } else {
+                                // Recompute filtered count and clamp selection
+                                let q = filter.to_lowercase();
+                                let new_count = self.all_channels.iter().filter(|(_, name)| name.to_lowercase().contains(&q)).count();
+                                if new_count > 0 {
+                                    let sel = list_state.selected().unwrap_or(0).min(new_count - 1);
+                                    list_state.select(Some(sel));
+                                } else {
+                                    list_state.select(None);
+                                }
+                            }
+                        }
+                        KeyCode::Char(c) => {
+                            filter.push(c);
+                            // Recompute filtered count and clamp selection
+                            let q = filter.to_lowercase();
+                            let new_count = self.all_channels.iter().filter(|(_, name)| name.to_lowercase().contains(&q)).count();
+                            if new_count > 0 {
+                                let sel = list_state.selected().unwrap_or(0).min(new_count - 1);
+                                list_state.select(Some(sel));
+                            } else {
+                                list_state.select(None);
+                            }
+                        }
+                        _ => {}
+                    }
                 } else {
                     match key.code {
                         KeyCode::Up | KeyCode::Char('k') => {
@@ -150,24 +218,26 @@ impl App {
                         }
                         KeyCode::Down | KeyCode::Char('j') => {
                             if let Some(i) = list_state.selected()
-                                && i + 1 < self.all_channels.len()
+                                && i + 1 < filtered_count
                             {
                                 list_state.select(Some(i + 1));
                             }
                         }
                         KeyCode::Char('g') => {
-                            if !self.all_channels.is_empty() {
+                            if filtered_count > 0 {
                                 list_state.select(Some(0));
                             }
                         }
                         KeyCode::Char('G') => {
-                            if !self.all_channels.is_empty() {
-                                list_state.select(Some(self.all_channels.len() - 1));
+                            if filtered_count > 0 {
+                                list_state.select(Some(filtered_count - 1));
                             }
                         }
                         KeyCode::Enter => {
-                            if let Some(i) = list_state.selected() {
-                                let ch = &self.all_channels[i];
+                            if let Some(sel) = list_state.selected()
+                                && sel < filtered_count
+                            {
+                                let (_, ch) = filtered_channels[sel];
                                 return SelectResult::Channel(ch.0.clone(), ch.1.clone());
                             }
                         }
@@ -177,6 +247,17 @@ impl App {
                         KeyCode::Char(':') => {
                             self.command_buf = Some(String::new());
                         }
+                        KeyCode::Char('/') => {
+                            filter_editing = true;
+                        }
+                        KeyCode::Esc => {
+                            if !filter.is_empty() {
+                                filter.clear();
+                                if !self.all_channels.is_empty() {
+                                    list_state.select(Some(0));
+                                }
+                            }
+                        }
                         _ => {}
                     }
                 }
@@ -184,10 +265,20 @@ impl App {
 
             let command_buf_snapshot = self.command_buf.clone();
             let all_channels = &self.all_channels;
+            let filter_snap = filter.clone();
+            let fe = filter_editing;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
-                    view::channel_select::render(frame, area, command_buf_snapshot.as_deref(), all_channels, &mut list_state);
+                    view::channel_select::render(
+                        frame,
+                        area,
+                        command_buf_snapshot.as_deref(),
+                        fe,
+                        &filter_snap,
+                        all_channels,
+                        &mut list_state,
+                    );
                 })
                 .expect("failed to draw");
         }
@@ -201,8 +292,23 @@ impl App {
         let mut list_state = ListState::default();
         let mut pending_g: Option<char> = None;
         let mut count_buf: u32 = 0;
+        let mut filter = String::new();
+        let mut filter_editing = false;
 
         loop {
+            // Compute visible (filtered, non-completed) count for navigation
+            let q = filter.to_lowercase();
+            let visible_count = messages
+                .iter()
+                .filter(|m| m.status != model::Status::Completed)
+                .filter(|m| {
+                    if q.is_empty() {
+                        return true;
+                    }
+                    m.text.to_lowercase().contains(&q) || m.display_name.to_lowercase().contains(&q) || m.channel_name.to_lowercase().contains(&q)
+                })
+                .count();
+
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
                 && let Ok(Event::Key(key)) = event::read()
                 && key.kind == KeyEventKind::Press
@@ -220,13 +326,16 @@ impl App {
                             }
                             let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
                             if let Some(name) = channel_arg
-                                && let Some(ch) = self.find_channel(name) {
-                                    channels = vec![ch];
-                                    messages.clear();
-                                    seen.clear();
-                                    last_poll = None;
-                                    list_state = ListState::default();
-                                }
+                                && let Some(ch) = self.find_channel(name)
+                            {
+                                channels = vec![ch];
+                                messages.clear();
+                                seen.clear();
+                                last_poll = None;
+                                list_state = ListState::default();
+                                filter.clear();
+                                filter_editing = false;
+                            }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
                             self.command_buf = None;
@@ -245,6 +354,79 @@ impl App {
                         }
                         _ => {}
                     }
+                } else if filter_editing {
+                    match key.code {
+                        KeyCode::Enter => {
+                            filter_editing = false;
+                            if visible_count > 0 {
+                                let sel = list_state.selected().unwrap_or(0).min(visible_count - 1);
+                                list_state.select(Some(sel));
+                            } else {
+                                list_state.select(None);
+                            }
+                        }
+                        KeyCode::Esc | KeyCode::Char('\x03') => {
+                            filter.clear();
+                            filter_editing = false;
+                            let total_visible = messages.iter().filter(|m| m.status != model::Status::Completed).count();
+                            if total_visible > 0 {
+                                list_state.select(Some(0));
+                            } else {
+                                list_state.select(None);
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            filter.pop();
+                            if filter.is_empty() {
+                                filter_editing = false;
+                                let total_visible = messages.iter().filter(|m| m.status != model::Status::Completed).count();
+                                if total_visible > 0 {
+                                    list_state.select(Some(0));
+                                } else {
+                                    list_state.select(None);
+                                }
+                            } else {
+                                // Clamp selection
+                                let fq = filter.to_lowercase();
+                                let new_count = messages
+                                    .iter()
+                                    .filter(|m| m.status != model::Status::Completed)
+                                    .filter(|m| {
+                                        m.text.to_lowercase().contains(&fq)
+                                            || m.display_name.to_lowercase().contains(&fq)
+                                            || m.channel_name.to_lowercase().contains(&fq)
+                                    })
+                                    .count();
+                                if new_count > 0 {
+                                    let sel = list_state.selected().unwrap_or(0).min(new_count - 1);
+                                    list_state.select(Some(sel));
+                                } else {
+                                    list_state.select(None);
+                                }
+                            }
+                        }
+                        KeyCode::Char(c) => {
+                            filter.push(c);
+                            // Clamp selection
+                            let fq = filter.to_lowercase();
+                            let new_count = messages
+                                .iter()
+                                .filter(|m| m.status != model::Status::Completed)
+                                .filter(|m| {
+                                    m.text.to_lowercase().contains(&fq)
+                                        || m.display_name.to_lowercase().contains(&fq)
+                                        || m.channel_name.to_lowercase().contains(&fq)
+                                })
+                                .count();
+                            if new_count > 0 {
+                                let sel = list_state.selected().unwrap_or(0).min(new_count - 1);
+                                list_state.select(Some(sel));
+                            } else {
+                                list_state.select(None);
+                            }
+                        }
+                        _ => {}
+                    }
                 } else {
                     match key.code {
                         KeyCode::Char(c @ '0'..='9') => {
@@ -257,11 +439,15 @@ impl App {
                             count_buf = 0;
                             self.command_buf = Some(String::new());
                         }
+                        KeyCode::Char('/') => {
+                            pending_g = None;
+                            count_buf = 0;
+                            filter_editing = true;
+                        }
                         KeyCode::Up | KeyCode::Char('k') => {
                             pending_g = None;
                             let repeat = if count_buf == 0 { 1 } else { count_buf as usize };
                             count_buf = 0;
-                            let visible_count = messages.iter().filter(|m| m.status != model::Status::Completed).count();
                             if visible_count > 0 {
                                 let current = list_state.selected().unwrap_or(0);
                                 let i = if repeat >= visible_count { 0 } else { current.saturating_sub(repeat) };
@@ -272,7 +458,6 @@ impl App {
                             pending_g = None;
                             let repeat = if count_buf == 0 { 1 } else { count_buf as usize };
                             count_buf = 0;
-                            let visible_count = messages.iter().filter(|m| m.status != model::Status::Completed).count();
                             if visible_count > 0 {
                                 let current = list_state.selected().unwrap_or(0);
                                 let i = if current + repeat >= visible_count {
@@ -286,7 +471,6 @@ impl App {
                         KeyCode::Char('g') => {
                             count_buf = 0;
                             if pending_g == Some('g') {
-                                let visible_count = messages.iter().filter(|m| m.status != model::Status::Completed).count();
                                 if visible_count > 0 {
                                     list_state.select(Some(0));
                                 }
@@ -298,7 +482,6 @@ impl App {
                         KeyCode::Char('G') => {
                             count_buf = 0;
                             if pending_g == Some('G') {
-                                let visible_count = messages.iter().filter(|m| m.status != model::Status::Completed).count();
                                 if visible_count > 0 {
                                     list_state.select(Some(visible_count - 1));
                                 }
@@ -311,7 +494,18 @@ impl App {
                             pending_g = None;
                             count_buf = 0;
                             if let Some(selected) = list_state.selected() {
-                                let visible: Vec<&TrackedMessage> = messages.iter().filter(|m| m.status != model::Status::Completed).collect();
+                                let visible: Vec<&TrackedMessage> = messages
+                                    .iter()
+                                    .filter(|m| m.status != model::Status::Completed)
+                                    .filter(|m| {
+                                        if q.is_empty() {
+                                            return true;
+                                        }
+                                        m.text.to_lowercase().contains(&q)
+                                            || m.display_name.to_lowercase().contains(&q)
+                                            || m.channel_name.to_lowercase().contains(&q)
+                                    })
+                                    .collect();
                                 if let Some(msg) = visible.get(selected) {
                                     let ts_for_url = msg.ts.replace('.', "");
                                     let url = format!("{}/archives/{}/p{}", self.workspace_url_for_links, msg.channel_id, ts_for_url);
@@ -320,7 +514,15 @@ impl App {
                             }
                         }
                         KeyCode::Esc => {
-                            return TrackResult::BackToSelect;
+                            if !filter.is_empty() {
+                                filter.clear();
+                                let total_visible = messages.iter().filter(|m| m.status != model::Status::Completed).count();
+                                if total_visible > 0 {
+                                    list_state.select(Some(0));
+                                }
+                            } else {
+                                return TrackResult::BackToSelect;
+                            }
                         }
                         _ => {
                             pending_g = None;
@@ -365,6 +567,8 @@ impl App {
             let command_buf_snapshot = self.command_buf.clone();
             let all_channels = &self.all_channels;
             let config = &self.config;
+            let filter_snap = filter.clone();
+            let fe = filter_editing;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -372,6 +576,8 @@ impl App {
                         frame,
                         area,
                         command_buf_snapshot.as_deref(),
+                        fe,
+                        &filter_snap,
                         all_channels,
                         &messages,
                         &channels,
