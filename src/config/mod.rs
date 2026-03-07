@@ -5,10 +5,19 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 #[derive(Debug, Deserialize)]
+pub struct ReactionsConfig {
+    pub seen: Vec<String>,
+    pub progressing: Vec<String>,
+    pub blocked: Vec<String>,
+    pub complete: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Config {
     pub channels: Vec<String>,
     pub time_window: String,
     pub poll_interval: String,
+    pub reactions: ReactionsConfig,
 }
 
 impl Config {
@@ -26,7 +35,12 @@ impl fmt::Display for Config {
         writeln!(f, "Config (~/slackemon.toml):")?;
         writeln!(f, "  channels: {}", self.channels.join(", "))?;
         writeln!(f, "  time_window: {}", self.time_window)?;
-        write!(f, "  poll_interval: {}", self.poll_interval)
+        writeln!(f, "  poll_interval: {}", self.poll_interval)?;
+        writeln!(f, "  reactions:")?;
+        writeln!(f, "    seen: {}", self.reactions.seen.join(", "))?;
+        writeln!(f, "    progressing: {}", self.reactions.progressing.join(", "))?;
+        writeln!(f, "    blocked: {}", self.reactions.blocked.join(", "))?;
+        write!(f, "    complete: {}", self.reactions.complete.join(", "))
     }
 }
 

@@ -1,3 +1,9 @@
 channels = ["questions"]
 time_window = "24h"
 poll_interval = "10s"
+
+[reactions]
+backlog = ["writing_hand"]
+taking_a_look = ["eyes"]
+blocked = ["hourglass"]
+completed = ["white_check_mark"]

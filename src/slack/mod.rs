@@ -97,6 +97,10 @@ impl Message {
         self.reactions.iter().any(|r| r.name == name)
     }
 
+    pub fn has_any_reaction(&self, names: &[String]) -> bool {
+        names.iter().any(|n| self.has_reaction(n))
+    }
+
     pub fn timestamp(&self) -> String {
         if let Some(dot) = self.ts.find('.')
             && let Ok(secs) = self.ts[..dot].parse::<u64>()

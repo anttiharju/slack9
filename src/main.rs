@@ -3,7 +3,7 @@ mod config;
 mod exitcode;
 mod slack;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::thread;
 
@@ -82,7 +82,7 @@ fn main() {
     println!();
 
     let mut seen: HashSet<String> = HashSet::new();
-    let mut completed: HashSet<String> = HashSet::new();
+    let mut status_seen: HashMap<String, String> = HashMap::new();
 
     loop {
         for (channel_id, channel_name) in &channels {
@@ -96,16 +96,32 @@ fn main() {
                                 let text = msg.text.as_deref().unwrap_or("");
                                 println!("[{}] #{} @{}: {}", msg.timestamp(), channel_name, display_name, text);
 
-                                if let Err(e) = client.reactions_add(channel_id, &msg.ts, "eyes") {
-                                    eprintln!("Failed to react to message: {}", e);
+                                for reaction in &config.reactions.seen {
+                                    if let Err(e) = client.reactions_add(channel_id, &msg.ts, reaction) {
+                                        eprintln!("Failed to react with :{}: {}", reaction, e);
+                                    }
                                 }
                             }
 
-                            if msg.has_reaction("white_check_mark") && completed.insert(msg.ts.clone()) {
-                                let user = msg.user.as_deref().unwrap_or("unknown");
-                                let display_name = client.resolve_user(user);
-                                let text = msg.text.as_deref().unwrap_or("");
-                                println!("[completed] #{} @{}: {}", channel_name, display_name, text);
+                            let new_status = if msg.has_any_reaction(&config.reactions.complete) {
+                                Some("completed")
+                            } else if msg.has_any_reaction(&config.reactions.blocked) {
+                                Some("blocked")
+                            } else if msg.has_any_reaction(&config.reactions.progressing) {
+                                Some("progressing")
+                            } else {
+                                None
+                            };
+
+                            if let Some(status) = new_status {
+                                let prev = status_seen.get(&msg.ts).map(|s| s.as_str());
+                                if prev != Some(status) {
+                                    let user = msg.user.as_deref().unwrap_or("unknown");
+                                    let display_name = client.resolve_user(user);
+                                    let text = msg.text.as_deref().unwrap_or("");
+                                    println!("[{}] #{} @{}: {}", status, channel_name, display_name, text);
+                                    status_seen.insert(msg.ts.clone(), status.to_string());
+                                }
                             }
                         }
                     }
