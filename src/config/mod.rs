@@ -79,5 +79,5 @@ pub fn load() -> Result<Config, String> {
 
 fn config_path() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").map_err(|_| "Could not determine home directory".to_string())?;
-    Ok(PathBuf::from(home).join("slack9s.toml"))
+    Ok(PathBuf::from(home).join(".slack9s.toml"))
 }
