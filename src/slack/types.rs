@@ -1,0 +1,99 @@
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct AuthTestResponse {
+    pub ok: bool,
+    pub url: Option<String>,
+    pub team: Option<String>,
+    pub user: Option<String>,
+    pub team_id: Option<String>,
+    pub user_id: Option<String>,
+    pub is_enterprise_install: Option<bool>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct ConversationsListResponse {
+    pub ok: bool,
+    pub channels: Option<Vec<Channel>>,
+    pub response_metadata: Option<ResponseMetadata>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct Channel {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct ResponseMetadata {
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct UsersListResponse {
+    pub ok: bool,
+    pub members: Option<Vec<User>>,
+    pub response_metadata: Option<ResponseMetadata>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct User {
+    pub id: String,
+    pub name: String,
+    pub profile: Option<UserProfile>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct UserProfile {
+    pub display_name: Option<String>,
+    pub real_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct ConversationsHistoryResponse {
+    pub ok: bool,
+    pub messages: Option<Vec<Message>>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct Reaction {
+    pub name: String,
+    pub users: Vec<String>,
+    pub count: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct Message {
+    pub ts: String,
+    pub user: Option<String>,
+    pub text: Option<String>,
+    #[serde(rename = "type")]
+    pub msg_type: Option<String>,
+    pub subtype: Option<String>,
+    #[serde(default)]
+    pub reactions: Vec<Reaction>,
+}
+
+impl Message {
+    pub fn has_reaction(&self, name: &str) -> bool {
+        self.reactions.iter().any(|r| r.name == name)
+    }
+
+    pub fn has_any_reaction(&self, names: &[String]) -> bool {
+        names.iter().any(|n| self.has_reaction(n))
+    }
+}
