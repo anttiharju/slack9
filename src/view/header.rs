@@ -11,7 +11,7 @@ pub const LOGO_HEIGHT: u16 = 5;
 pub fn render(frame: &mut Frame, area: Rect) {
     let lines: Vec<Line> = SMALL_LOGO
         .lines()
-        .map(|l| Line::from(Span::styled(l, Style::default().fg(Color::Cyan))))
+        .map(|l| Line::from(Span::styled(l, Style::default().fg(Color::Rgb(255, 165, 0)))))
         .collect();
 
     let paragraph = Paragraph::new(lines);

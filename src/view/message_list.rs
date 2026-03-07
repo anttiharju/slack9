@@ -81,7 +81,7 @@ pub fn render(
             ListItem::new(Line::from(vec![
                 Span::styled(format!("[{:<14}] ", label), Style::default().fg(color).add_modifier(Modifier::BOLD)),
                 Span::styled(format!("#{} ", m.channel_name), Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("@{}", m.display_name), Style::default().fg(Color::Cyan)),
+                Span::styled(format!("@{}", m.display_name), Style::default().fg(Color::Rgb(255, 165, 0))),
                 Span::raw(format!(": {}", m.text)),
             ]))
         })

@@ -58,7 +58,12 @@ pub fn render(
 
     let items: Vec<ListItem> = filtered_channels
         .iter()
-        .map(|(_, name)| ListItem::new(Line::from(vec![Span::styled(format!("#{}", name), Style::default().fg(Color::Cyan))])))
+        .map(|(_, name)| {
+            ListItem::new(Line::from(vec![Span::styled(
+                format!("#{}", name),
+                Style::default().fg(Color::Rgb(255, 165, 0)),
+            )]))
+        })
         .collect();
 
     let filter_indicator = if !filter.is_empty() && !filter_editing {

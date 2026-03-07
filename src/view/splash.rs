@@ -12,7 +12,7 @@ pub fn render(frame: &mut Frame) {
     let lines: Vec<Line> = BIG_LOGO
         .lines()
         .filter(|l| !l.is_empty())
-        .map(|l| Line::from(Span::styled(l, Style::default().fg(Color::Cyan))))
+        .map(|l| Line::from(Span::styled(l, Style::default().fg(Color::Rgb(255, 165, 0)))))
         .collect();
 
     let logo_height = lines.len() as u16;
