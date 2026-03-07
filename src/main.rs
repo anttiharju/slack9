@@ -122,49 +122,114 @@ fn main() {
     if !all_channels.is_empty() {
         channel_list_state.select(Some(0));
     }
+    let mut command_buf: Option<String> = None;
 
     'outer: loop {
         let selected_channel: (String, String) = loop {
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
                 && let Ok(Event::Key(key)) = event::read()
-                    && key.kind == KeyEventKind::Press {
-                        match key.code {
-                            KeyCode::Up | KeyCode::Char('k') => {
-                                if let Some(i) = channel_list_state.selected()
-                                    && i > 0 {
-                                        channel_list_state.select(Some(i - 1));
-                                    }
-                            }
-                            KeyCode::Down | KeyCode::Char('j') => {
-                                if let Some(i) = channel_list_state.selected()
-                                    && i + 1 < all_channels.len() {
-                                        channel_list_state.select(Some(i + 1));
-                                    }
-                            }
-                            KeyCode::Char('g') => {
-                                if !all_channels.is_empty() {
-                                    channel_list_state.select(Some(0));
-                                }
-                            }
-                            KeyCode::Char('G') => {
-                                if !all_channels.is_empty() {
-                                    channel_list_state.select(Some(all_channels.len() - 1));
-                                }
-                            }
-                            KeyCode::Enter => {
-                                if let Some(i) = channel_list_state.selected() {
-                                    break all_channels[i].clone();
-                                }
-                            }
-                            KeyCode::Char('q') | KeyCode::Esc => {
+                && key.kind == KeyEventKind::Press
+            {
+                if let Some(ref mut buf) = command_buf {
+                    match key.code {
+                        KeyCode::Enter => {
+                            let cmd = buf.trim().to_string();
+                            command_buf = None;
+                            if cmd == "q" || cmd == "q!" {
                                 break 'outer;
                             }
-                            _ => {}
                         }
+                        KeyCode::Esc | KeyCode::Char('\x03') => {
+                            command_buf = None;
+                        }
+                        KeyCode::Backspace => {
+                            buf.pop();
+                            if buf.is_empty() {
+                                command_buf = None;
+                            }
+                        }
+                        KeyCode::Char(c) => {
+                            buf.push(c);
+                        }
+                        _ => {}
                     }
+                } else {
+                    match key.code {
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            if let Some(i) = channel_list_state.selected()
+                                && i > 0
+                            {
+                                channel_list_state.select(Some(i - 1));
+                            }
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            if let Some(i) = channel_list_state.selected()
+                                && i + 1 < all_channels.len()
+                            {
+                                channel_list_state.select(Some(i + 1));
+                            }
+                        }
+                        KeyCode::Char('g') => {
+                            if !all_channels.is_empty() {
+                                channel_list_state.select(Some(0));
+                            }
+                        }
+                        KeyCode::Char('G') => {
+                            if !all_channels.is_empty() {
+                                channel_list_state.select(Some(all_channels.len() - 1));
+                            }
+                        }
+                        KeyCode::Enter => {
+                            if let Some(i) = channel_list_state.selected() {
+                                break all_channels[i].clone();
+                            }
+                        }
+                        KeyCode::Char('q') => {
+                            break 'outer;
+                        }
+                        KeyCode::Char(':') => {
+                            command_buf = Some(String::new());
+                        }
+                        _ => {}
+                    }
+                }
+            }
 
+            let command_buf_snapshot = command_buf.clone();
             terminal
                 .draw(|frame| {
+                    let area = frame.area();
+                    let in_command_mode = command_buf_snapshot.is_some();
+
+                    let chunks = if in_command_mode {
+                        Layout::default()
+                            .direction(Direction::Vertical)
+                            .constraints([Constraint::Length(3), Constraint::Min(1)])
+                            .split(area)
+                    } else {
+                        Layout::default()
+                            .direction(Direction::Vertical)
+                            .constraints([Constraint::Min(1)])
+                            .split(area)
+                    };
+
+                    let (cmd_block_area, list_area) = if in_command_mode {
+                        (Some(chunks[0]), chunks[1])
+                    } else {
+                        (None, chunks[0])
+                    };
+
+                    if let Some(cmd_area) = cmd_block_area {
+                        let buf = command_buf_snapshot.as_deref().unwrap_or("");
+                        let cmd_paragraph = Paragraph::new(Line::from(vec![Span::raw(":"), Span::raw(buf)])).block(
+                            Block::default()
+                                .title(" command ")
+                                .borders(Borders::ALL)
+                                .padding(Padding::new(1, 1, 0, 0)),
+                        );
+                        frame.render_widget(cmd_paragraph, cmd_area);
+                    }
+
                     let items: Vec<ListItem> = all_channels
                         .iter()
                         .map(|(_, name)| ListItem::new(Line::from(vec![Span::styled(format!("#{}", name), Style::default().fg(Color::Cyan))])))
@@ -174,14 +239,14 @@ fn main() {
                         .block(
                             Block::default()
                                 .title(" slack9s \u{2014} select channel ")
-                                .title_bottom(" enter: select | q: quit ")
+                                .title_bottom(" enter: select | :q to quit ")
                                 .borders(Borders::ALL)
                                 .padding(Padding::new(1, 1, 0, 0)),
                         )
                         .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
                         .highlight_symbol("> ");
 
-                    frame.render_stateful_widget(list, frame.area(), &mut channel_list_state);
+                    frame.render_stateful_widget(list, list_area, &mut channel_list_state);
                 })
                 .expect("failed to draw");
         };
@@ -191,7 +256,6 @@ fn main() {
         let mut messages: Vec<TrackedMessage> = Vec::new();
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut last_poll: Option<Instant> = None;
-        let mut command_buf: Option<String> = None;
         let mut list_state = ListState::default();
         let mut pending_g: Option<char> = None;
         let mut count_buf: u32 = 0;
@@ -208,6 +272,9 @@ fn main() {
                             command_buf = None;
                             if cmd == "q" || cmd == "q!" {
                                 break 'outer;
+                            }
+                            if cmd == "c" || cmd == "channel" {
+                                continue 'outer;
                             }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
