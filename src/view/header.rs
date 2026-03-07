@@ -33,7 +33,8 @@ pub fn render(frame: &mut Frame, area: Rect, poll_interval: Option<Duration>, po
         .map(|l| Line::from(Span::styled(l, Style::default().fg(Color::Rgb(255, 165, 0)))))
         .collect();
 
-    let x = area.right().saturating_sub(logo_width);
+    let x = area.right().saturating_sub(logo_width).saturating_sub(1);
+    let bar_x = area.right().saturating_sub(logo_width);
     let logo_area = Rect::new(x, area.y, logo_width, area.height.min(5));
 
     let paragraph = Paragraph::new(lines);
@@ -56,7 +57,7 @@ pub fn render(frame: &mut Frame, area: Rect, poll_interval: Option<Duration>, po
         if bar_y >= area.bottom() {
             return;
         }
-        let bar_area = Rect::new(x, bar_y, logo_width, 1);
+        let bar_area = Rect::new(bar_x, bar_y, logo_width, 1);
         let num_cells = bar_width.div_ceil(2); // each cell = block + space
 
         let cycle_secs = interval.as_secs_f64().max(1.0);
