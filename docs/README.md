@@ -23,3 +23,22 @@ and you have it copied in your clipboard.
 Dev Tools -> Storage -> Cookies -> d.
 
 This one you need to do manually.
+
+## Usage
+
+Assumes you use direnv.
+
+1. Create `.envrc` that supplies the following:
+
+```sh
+#!/usr/bin/env bash
+
+export SLACK9S_WORKSPACE=https://foo.slack.com
+
+# consider 1Password CLI for safe storage if you have it
+export SLACK9S_XOXC=xoxc-bar
+export SLACK9S_XOXD=xoxd-baz
+```
+
+2. `direnv allow`
+3. `slack9s`
