@@ -198,26 +198,12 @@ impl SlackClient {
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
-    /// Resolves channel names to (id, name) pairs. Returns an error listing any names that couldn't be found.
-    pub fn resolve_channels(&self, names: &[String]) -> Result<Vec<(String, String)>, String> {
-        let name_to_id = self.fetch_all_channels()?;
-
-        let mut resolved = Vec::new();
-        let mut missing = Vec::new();
-
-        for name in names {
-            if let Some(id) = name_to_id.get(name.as_str()) {
-                resolved.push((id.clone(), name.clone()));
-            } else {
-                missing.push(name.as_str());
-            }
-        }
-
-        if !missing.is_empty() {
-            return Err(format!("Could not find channels: {}", missing.join(", ")));
-        }
-
-        Ok(resolved)
+    /// Lists all accessible channels as (id, name) pairs sorted by name.
+    pub fn list_channels(&self) -> Result<Vec<(String, String)>, String> {
+        let map = self.fetch_all_channels()?;
+        let mut channels: Vec<(String, String)> = map.into_iter().map(|(name, id)| (id, name)).collect();
+        channels.sort_by(|a, b| a.1.cmp(&b.1));
+        Ok(channels)
     }
 
     fn fetch_all_channels(&self) -> Result<HashMap<String, String>, String> {

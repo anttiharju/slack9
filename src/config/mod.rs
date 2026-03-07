@@ -14,7 +14,6 @@ pub struct ReactionsConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    pub channels: Vec<String>,
     pub time_window: String,
     pub poll_interval: String,
     pub reactions: ReactionsConfig,
@@ -33,7 +32,6 @@ impl Config {
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Config (~/slack9s.toml):")?;
-        writeln!(f, "  channels: {}", self.channels.join(", "))?;
         writeln!(f, "  time_window: {}", self.time_window)?;
         writeln!(f, "  poll_interval: {}", self.poll_interval)?;
         writeln!(f, "  reactions:")?;
