@@ -8,7 +8,7 @@ Open Slack in your browser.
 
 ### xoxc
 
-Run in Dev Tools -> Console:
+Dev Tools -> Console
 
 <!-- prettier-ignore-start -->
 ```js
@@ -16,6 +16,10 @@ copy(JSON.parse(localStorage.getItem("localConfig_v2")).teams[Object.keys(JSON.p
 ```
 <!-- prettier-ignore-end -->
 
+and you have it copied in your clipboard.
+
 ### xoxd
 
-Dev Tools -> Storage -> Cookies -> d
+Dev Tools -> Storage -> Cookies -> d.
+
+This one you need to do manually.
