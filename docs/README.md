@@ -1,3 +1,3 @@
-# rust-starter
+# slackemon
 
-`rust-starter` is a template for my Rust projects to make it easier to start new ones.
+`slackemon` is a template for my Rust projects to make it easier to start new ones.

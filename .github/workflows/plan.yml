@@ -26,7 +26,7 @@ on:
 
 jobs:
   container:
-    if: github.event.repository.name != 'rust-starter'
+    if: github.event.repository.name != 'slackemon'
     name: Container
     runs-on: ubuntu-24.04
     permissions:
