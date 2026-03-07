@@ -9,8 +9,10 @@ use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_ra
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::widgets::ListState;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
+use std::sync::Arc;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 enum SelectResult {
@@ -25,13 +27,14 @@ enum TrackResult {
     Quit,
 }
 
+#[derive(Clone)]
 enum MessageSource {
     Channels(Vec<(String, String)>),
     Search(String),
 }
 
 pub struct App {
-    client: SlackClient,
+    client: Arc<SlackClient>,
     config: Config,
     all_channels: Vec<(String, String)>,
     user_names: Vec<String>,
@@ -74,7 +77,7 @@ impl App {
         }));
 
         Self {
-            client,
+            client: Arc::new(client),
             config,
             all_channels,
             user_names: Vec::new(),
@@ -122,20 +125,6 @@ impl App {
                 },
             }
         }
-    }
-
-    fn resolve_mentions(&self, text: &str) -> String {
-        let mut result = text.to_string();
-        while let Some(start) = result.find("<@") {
-            if let Some(end) = result[start..].find('>') {
-                let user_id = &result[start + 2..start + end];
-                let name = self.client.resolve_user(user_id);
-                result.replace_range(start..start + end + 1, &format!("@{}", name));
-            } else {
-                break;
-            }
-        }
-        result
     }
 
     fn find_channel(&self, name: &str) -> Option<(String, String)> {
@@ -324,63 +313,11 @@ impl App {
     }
 
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
-        match source {
-            MessageSource::Channels(channels) => {
-                for (channel_id, channel_name) in channels {
-                    if let Ok(resp) = self.client.conversations_history(channel_id, self.past)
-                        && let Some(msgs) = resp.messages
-                    {
-                        for msg in msgs.iter().rev() {
-                            if seen.contains_key(&msg.ts) {
-                                continue;
-                            } else {
-                                let user_id = msg.user.as_deref().unwrap_or("unknown");
-                                let display_name = self.client.resolve_user(user_id);
-                                let raw_text = msg.text.as_deref().unwrap_or("").to_string();
-                                let text = self.resolve_mentions(&raw_text);
-
-                                seen.insert(msg.ts.clone(), messages.len());
-                                messages.push(TrackedMessage {
-                                    channel_id: channel_id.clone(),
-                                    channel_name: channel_name.clone(),
-                                    ts: msg.ts.clone(),
-                                    display_name,
-                                    text,
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-            MessageSource::Search(query) => {
-                if let Ok(resp) = self.client.search_messages(query)
-                    && let Some(search_msgs) = resp.messages
-                    && let Some(matches) = search_msgs.matches
-                {
-                    for m in &matches {
-                        if seen.contains_key(&m.ts) {
-                            continue;
-                        } else {
-                            let (channel_id, channel_name) = match &m.channel {
-                                Some(ch) => (ch.id.clone(), ch.name.clone()),
-                                None => ("unknown".to_string(), "unknown".to_string()),
-                            };
-                            let user_id_str = m.user.as_deref().unwrap_or("unknown");
-                            let display_name = self.client.resolve_user(user_id_str);
-                            let raw_text = m.text.as_deref().unwrap_or("").to_string();
-                            let text = self.resolve_mentions(&raw_text);
-
-                            seen.insert(m.ts.clone(), messages.len());
-                            messages.push(TrackedMessage {
-                                channel_id,
-                                channel_name,
-                                ts: m.ts.clone(),
-                                display_name,
-                                text,
-                            });
-                        }
-                    }
-                }
+        let new_msgs = fetch_messages(&self.client, source, self.past, &seen.keys().cloned().collect());
+        for msg in new_msgs {
+            if !seen.contains_key(&msg.ts) {
+                seen.insert(msg.ts.clone(), messages.len());
+                messages.push(msg);
             }
         }
     }
@@ -392,6 +329,13 @@ impl App {
         let mut list_state = ListState::default();
         let mut pending_g: Option<char> = None;
         let mut count_buf: u32 = 0;
+        let (tx, rx) = mpsc::channel::<(u64, Vec<TrackedMessage>)>();
+        let mut poll_generation: u64 = 0;
+        let mut poll_in_flight = false;
+
+        // Do first poll synchronously so there's data on the first frame
+        self.poll_messages(&source, &mut messages, &mut seen);
+        last_poll = Some(Instant::now());
 
         loop {
             let visible_count = messages.len();
@@ -422,6 +366,8 @@ impl App {
                                     seen.clear();
                                     last_poll = None;
                                     list_state = ListState::default();
+                                    poll_generation += 1;
+                                    poll_in_flight = false;
                                 }
                             }
                             if let Some(rest) = cmd.strip_prefix("search ") {
@@ -533,9 +479,33 @@ impl App {
                 }
             }
 
-            if last_poll.is_none_or(|t| t.elapsed() >= self.poll) {
+            // Receive results from background poll
+            if let Ok((generation, new_msgs)) = rx.try_recv() {
+                poll_in_flight = false;
+                if generation == poll_generation {
+                    for msg in new_msgs {
+                        if !seen.contains_key(&msg.ts) {
+                            seen.insert(msg.ts.clone(), messages.len());
+                            messages.push(msg);
+                        }
+                    }
+                }
+            }
+
+            // Spawn background poll when timer expires and none in-flight
+            if !poll_in_flight && last_poll.is_none_or(|t| t.elapsed() >= self.poll) {
                 last_poll = Some(Instant::now());
-                self.poll_messages(&source, &mut messages, &mut seen);
+                poll_in_flight = true;
+                let client = Arc::clone(&self.client);
+                let source_clone = source.clone();
+                let past = self.past;
+                let seen_keys: HashSet<String> = seen.keys().cloned().collect();
+                let generation = poll_generation;
+                let tx = tx.clone();
+                std::thread::spawn(move || {
+                    let results = fetch_messages(&client, &source_clone, past, &seen_keys);
+                    let _ = tx.send((generation, results));
+                });
             }
 
             if list_state.selected().is_none() && !messages.is_empty() {
@@ -574,4 +544,76 @@ impl App {
                 .expect("failed to draw");
         }
     }
+}
+
+fn resolve_mentions(client: &SlackClient, text: &str) -> String {
+    let mut result = text.to_string();
+    while let Some(start) = result.find("<@") {
+        if let Some(end) = result[start..].find('>') {
+            let user_id = &result[start + 2..start + end];
+            let name = client.resolve_user(user_id);
+            result.replace_range(start..start + end + 1, &format!("@{}", name));
+        } else {
+            break;
+        }
+    }
+    result
+}
+
+fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, seen_keys: &HashSet<String>) -> Vec<TrackedMessage> {
+    let mut results = Vec::new();
+    match source {
+        MessageSource::Channels(channels) => {
+            for (channel_id, channel_name) in channels {
+                if let Ok(resp) = client.conversations_history(channel_id, past)
+                    && let Some(msgs) = resp.messages
+                {
+                    for msg in msgs.iter().rev() {
+                        if !seen_keys.contains(&msg.ts) {
+                            let user_id = msg.user.as_deref().unwrap_or("unknown");
+                            let display_name = client.resolve_user(user_id);
+                            let raw_text = msg.text.as_deref().unwrap_or("").to_string();
+                            let text = resolve_mentions(client, &raw_text);
+
+                            results.push(TrackedMessage {
+                                channel_id: channel_id.clone(),
+                                channel_name: channel_name.clone(),
+                                ts: msg.ts.clone(),
+                                display_name,
+                                text,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        MessageSource::Search(query) => {
+            if let Ok(resp) = client.search_messages(query)
+                && let Some(search_msgs) = resp.messages
+                && let Some(matches) = search_msgs.matches
+            {
+                for m in &matches {
+                    if !seen_keys.contains(&m.ts) {
+                        let (channel_id, channel_name) = match &m.channel {
+                            Some(ch) => (ch.id.clone(), ch.name.clone()),
+                            None => ("unknown".to_string(), "unknown".to_string()),
+                        };
+                        let user_id_str = m.user.as_deref().unwrap_or("unknown");
+                        let display_name = client.resolve_user(user_id_str);
+                        let raw_text = m.text.as_deref().unwrap_or("").to_string();
+                        let text = resolve_mentions(client, &raw_text);
+
+                        results.push(TrackedMessage {
+                            channel_id,
+                            channel_name,
+                            ts: m.ts.clone(),
+                            display_name,
+                            text,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    results
 }
