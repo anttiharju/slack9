@@ -8,14 +8,22 @@ const DEFAULT_PAST: &str = "24h";
 const DEFAULT_POLL: &str = "10s";
 
 #[derive(Debug, Deserialize)]
+#[derive(Default)]
 pub struct Config {
+    #[serde(default)]
+    pub header: HeaderConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HeaderConfig {
     #[serde(default = "default_past")]
     pub past: String,
     #[serde(default = "default_poll")]
     pub poll: String,
 }
 
-impl Default for Config {
+
+impl Default for HeaderConfig {
     fn default() -> Self {
         Self {
             past: default_past(),
@@ -32,7 +40,7 @@ fn default_poll() -> String {
     DEFAULT_POLL.to_string()
 }
 
-impl Config {
+impl HeaderConfig {
     pub fn past_duration(&self) -> Result<Duration, String> {
         parse_duration(&self.past)
     }
@@ -61,8 +69,9 @@ impl Config {
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Config (~/.slack9.toml):")?;
-        writeln!(f, "  past: {}", self.past)?;
-        write!(f, "  poll: {}", self.poll)?;
+        writeln!(f, "  [header]")?;
+        writeln!(f, "    past: {}", self.header.past)?;
+        write!(f, "    poll: {}", self.header.poll)?;
         Ok(())
     }
 }

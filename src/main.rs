@@ -14,12 +14,12 @@ fn main() {
 
     let config = config::load();
 
-    let past = config.past_duration().unwrap_or_else(|e| {
+    let past = config.header.past_duration().unwrap_or_else(|e| {
         eprintln!("Error: invalid past: {}", e);
         std::process::exit(exitcode::invalid_past());
     });
 
-    let poll = config.poll_duration().unwrap_or_else(|e| {
+    let poll = config.header.poll_duration().unwrap_or_else(|e| {
         eprintln!("Error: invalid poll: {}", e);
         std::process::exit(exitcode::invalid_poll());
     });

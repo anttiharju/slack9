@@ -36,9 +36,9 @@ pub fn render(
         outer[0],
         Some(poll),
         poll_elapsed,
-        Some(&config.poll_label()),
+        Some(&config.header.poll_label()),
         Some(team_name),
-        Some(&config.past_label()),
+        Some(&config.header.past_label()),
     );
     let content_area = outer[1];
 
@@ -78,7 +78,10 @@ pub fn render(
         .collect::<Vec<_>>()
         .join(", ");
 
-    let title = format!(" slack9 \u{2014} {} (every {}, {} window) ", channel_list, config.poll, config.past,);
+    let title = format!(
+        " slack9 \u{2014} {} (every {}, {} window) ",
+        channel_list, config.header.poll, config.header.past,
+    );
 
     let list_border_color = if has_overlay { Color::Blue } else { Color::Cyan };
     let list = List::new(items)
