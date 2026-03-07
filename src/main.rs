@@ -94,6 +94,10 @@ fn main() {
                                 let display_name = client.resolve_user(user);
                                 let text = msg.text.as_deref().unwrap_or("");
                                 println!("[{}] #{} @{}: {}", msg.timestamp(), channel_name, display_name, text);
+
+                                if let Err(e) = client.reactions_add(channel_id, &msg.ts, "eyes") {
+                                    eprintln!("Failed to react to message: {}", e);
+                                }
                             }
                         }
                     }
