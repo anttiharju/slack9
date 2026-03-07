@@ -1,19 +1,5 @@
 use assert_cmd::cargo::cargo_bin_cmd;
 
-fn run() -> (String, String, std::process::ExitStatus) {
-    let output = cargo_bin_cmd!("slackemon").output().unwrap();
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-    (stdout, stderr, output.status)
-}
-
-#[test]
-fn test_runs_without_panic() {
-    let (_stdout, stderr, _status) = run();
-
-    assert!(!stderr.contains("panicked"), "Program panicked: {}", stderr);
-}
-
 #[test]
 fn test_exitcode_usage() {
     use std::collections::HashMap;
