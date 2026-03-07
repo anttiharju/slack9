@@ -41,14 +41,18 @@ fn main() {
 
     let mut client = slack::SlackClient::new(workspace_url, xoxd, xoxc);
 
-    let (team_id, team_name) = match client.auth_test() {
+    let (team_id, team_name, user_id) = match client.auth_test() {
         Ok(response) if response.ok => {
             let id = response.team_id.unwrap_or_else(|| {
                 eprintln!("Error: auth.test did not return a team_id");
                 std::process::exit(exitcode::missing_team_id());
             });
             let name = response.team.unwrap_or_else(|| id.clone());
-            (id, name)
+            let uid = response.user_id.unwrap_or_else(|| {
+                eprintln!("Error: auth.test did not return a user_id");
+                std::process::exit(exitcode::missing_team_id());
+            });
+            (id, name, uid)
         }
         Ok(response) => {
             eprintln!("Auth failed: {}", response.error.unwrap_or_else(|| "unknown error".to_string()));
@@ -70,6 +74,6 @@ fn main() {
         std::process::exit(exitcode::channel_resolve_error());
     });
 
-    let app = app::App::new(client, config, all_channels, team_id, team_name, past, poll);
+    let app = app::App::new(client, config, all_channels, team_id, team_name, user_id, past, poll);
     app.run();
 }

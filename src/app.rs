@@ -15,15 +15,8 @@ use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-enum SelectResult {
-    Channel(String, String),
-    Search(Vec<String>),
-    Quit,
-}
-
 enum TrackResult {
-    BackToSelect,
-    Search(Vec<String>),
+    Restart,
     Quit,
 }
 
@@ -40,6 +33,7 @@ pub struct App {
     user_names: Vec<String>,
     team_id: String,
     team_name: String,
+    user_id: String,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
     past: Duration,
@@ -60,6 +54,7 @@ impl App {
         all_channels: Vec<(String, String)>,
         team_id: String,
         team_name: String,
+        user_id: String,
         past: Duration,
         poll: Duration,
     ) -> Self {
@@ -83,6 +78,7 @@ impl App {
             user_names: Vec::new(),
             team_id,
             team_name,
+            user_id,
             terminal,
             command_buf: None,
             past,
@@ -106,23 +102,12 @@ impl App {
             }
         }
 
-        loop {
-            let selected = match self.select_channel() {
-                SelectResult::Channel(id, name) => (id, name),
-                SelectResult::Search(handles) => match self.track_search(&handles) {
-                    TrackResult::Quit => break,
-                    TrackResult::BackToSelect | TrackResult::Search(_) => continue,
-                },
-                SelectResult::Quit => break,
-            };
+        let default_source = MessageSource::Search(format!("<@{}>", self.user_id));
 
-            match self.track_messages(vec![selected]) {
+        loop {
+            match self.track(default_source.clone()) {
+                TrackResult::Restart => continue,
                 TrackResult::Quit => break,
-                TrackResult::BackToSelect => continue,
-                TrackResult::Search(handles) => match self.track_search(&handles) {
-                    TrackResult::Quit => break,
-                    TrackResult::BackToSelect | TrackResult::Search(_) => continue,
-                },
             }
         }
     }
@@ -169,149 +154,6 @@ impl App {
         }
     }
 
-    fn select_channel(&mut self) -> SelectResult {
-        let mut list_state = ListState::default();
-        if !self.all_channels.is_empty() {
-            list_state.select(Some(0));
-        }
-
-        loop {
-            let channel_count = self.all_channels.len();
-
-            if event::poll(Duration::from_millis(100)).unwrap_or(false)
-                && let Ok(Event::Key(key)) = event::read()
-                && key.kind == KeyEventKind::Press
-            {
-                if let Some(ref mut buf) = self.command_buf {
-                    match key.code {
-                        KeyCode::Enter => {
-                            let cmd = buf.trim().to_string();
-                            self.command_buf = None;
-                            if cmd == "q" || cmd == "q!" {
-                                return SelectResult::Quit;
-                            }
-                            self.handle_config_command(&cmd);
-                            let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
-                            if let Some(name) = channel_arg
-                                && let Some(ch) = self.find_channel(name)
-                            {
-                                return SelectResult::Channel(ch.0, ch.1);
-                            }
-                            if let Some(rest) = cmd.strip_prefix("search ") {
-                                let handles: Vec<String> = rest
-                                    .split_whitespace()
-                                    .filter_map(|h| {
-                                        let h = h.trim_start_matches('@');
-                                        self.client.find_user_display_name(h)
-                                    })
-                                    .collect();
-                                if !handles.is_empty() {
-                                    return SelectResult::Search(handles);
-                                }
-                            }
-                        }
-                        KeyCode::Esc | KeyCode::Char('\x03') => {
-                            self.command_buf = None;
-                        }
-                        KeyCode::Backspace => {
-                            buf.pop();
-                            if buf.is_empty() {
-                                self.command_buf = None;
-                            }
-                        }
-                        KeyCode::Char(c) => {
-                            buf.push(c);
-                        }
-                        KeyCode::Tab => {
-                            input::tab_complete_channel(buf, &self.all_channels, &self.user_names);
-                        }
-                        _ => {}
-                    }
-                } else {
-                    match key.code {
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            if let Some(i) = list_state.selected()
-                                && i > 0
-                            {
-                                list_state.select(Some(i - 1));
-                            }
-                        }
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            if let Some(i) = list_state.selected()
-                                && i + 1 < channel_count
-                            {
-                                list_state.select(Some(i + 1));
-                            }
-                        }
-                        KeyCode::Char('g') => {
-                            if channel_count > 0 {
-                                list_state.select(Some(0));
-                            }
-                        }
-                        KeyCode::Char('G') => {
-                            if channel_count > 0 {
-                                list_state.select(Some(channel_count - 1));
-                            }
-                        }
-                        KeyCode::Enter => {
-                            if let Some(sel) = list_state.selected()
-                                && sel < channel_count
-                            {
-                                let ch = &self.all_channels[sel];
-                                return SelectResult::Channel(ch.0.clone(), ch.1.clone());
-                            }
-                        }
-                        KeyCode::Char('q') => {
-                            return SelectResult::Quit;
-                        }
-                        KeyCode::Char(':') => {
-                            self.command_buf = Some(String::new());
-                        }
-                        _ => {}
-                    }
-                }
-            }
-
-            let command_buf_snapshot = self.command_buf.clone();
-            let all_channels = &self.all_channels;
-            let user_names = &self.user_names;
-            let poll_label = self.config.header.poll_label();
-            let workspace_label = self.team_name.clone();
-            let past_label = self.config.header.past_label();
-            self.terminal
-                .draw(|frame| {
-                    let area = frame.area();
-                    view::channel_select::render(
-                        frame,
-                        area,
-                        command_buf_snapshot.as_deref(),
-                        all_channels,
-                        user_names,
-                        &mut list_state,
-                        &poll_label,
-                        &workspace_label,
-                        &past_label,
-                    );
-                })
-                .expect("failed to draw");
-        }
-    }
-
-    fn track_messages(&mut self, channels: Vec<(String, String)>) -> TrackResult {
-        self.track(MessageSource::Channels(channels))
-    }
-
-    fn track_search(&mut self, display_names: &[String]) -> TrackResult {
-        let search_queries: Vec<String> = display_names
-            .iter()
-            .map(|name| match self.client.find_user_id(name) {
-                Some(id) => format!("<@{}>", id),
-                None => format!("@{}", name),
-            })
-            .collect();
-        self.track(MessageSource::Search(search_queries.join(" ")))
-    }
-
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
         let new_msgs = fetch_messages(&self.client, source, self.past, &seen.keys().cloned().collect());
         for msg in new_msgs {
@@ -352,23 +194,18 @@ impl App {
                             if cmd == "q" || cmd == "q!" {
                                 return TrackResult::Quit;
                             }
-                            if cmd == "c" || cmd == "channel" {
-                                return TrackResult::BackToSelect;
-                            }
                             self.handle_config_command(&cmd);
-                            if let MessageSource::Channels(ref mut channels) = source {
-                                let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
-                                if let Some(name) = channel_arg
-                                    && let Some(ch) = self.find_channel(name)
-                                {
-                                    *channels = vec![ch];
-                                    messages.clear();
-                                    seen.clear();
-                                    last_poll = None;
-                                    list_state = ListState::default();
-                                    poll_generation += 1;
-                                    poll_in_flight = false;
-                                }
+                            let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
+                            if let Some(name) = channel_arg
+                                && let Some(ch) = self.find_channel(name)
+                            {
+                                source = MessageSource::Channels(vec![ch]);
+                                messages.clear();
+                                seen.clear();
+                                last_poll = None;
+                                list_state = ListState::default();
+                                poll_generation += 1;
+                                poll_in_flight = false;
                             }
                             if let Some(rest) = cmd.strip_prefix("search ") {
                                 let handles: Vec<String> = rest
@@ -379,7 +216,20 @@ impl App {
                                     })
                                     .collect();
                                 if !handles.is_empty() {
-                                    return TrackResult::Search(handles);
+                                    let search_queries: Vec<String> = handles
+                                        .iter()
+                                        .map(|name| match self.client.find_user_id(name) {
+                                            Some(id) => format!("<@{}>", id),
+                                            None => format!("@{}", name),
+                                        })
+                                        .collect();
+                                    source = MessageSource::Search(search_queries.join(" "));
+                                    messages.clear();
+                                    seen.clear();
+                                    last_poll = None;
+                                    list_state = ListState::default();
+                                    poll_generation += 1;
+                                    poll_in_flight = false;
                                 }
                             }
                         }
@@ -469,7 +319,7 @@ impl App {
                             }
                         }
                         KeyCode::Esc => {
-                            return TrackResult::BackToSelect;
+                            return TrackResult::Restart;
                         }
                         _ => {
                             pending_g = None;
