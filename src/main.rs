@@ -82,6 +82,7 @@ fn main() {
     println!();
 
     let mut seen: HashSet<String> = HashSet::new();
+    let mut completed: HashSet<String> = HashSet::new();
 
     loop {
         for (channel_id, channel_name) in &channels {
@@ -98,6 +99,13 @@ fn main() {
                                 if let Err(e) = client.reactions_add(channel_id, &msg.ts, "eyes") {
                                     eprintln!("Failed to react to message: {}", e);
                                 }
+                            }
+
+                            if msg.has_reaction("white_check_mark") && completed.insert(msg.ts.clone()) {
+                                let user = msg.user.as_deref().unwrap_or("unknown");
+                                let display_name = client.resolve_user(user);
+                                let text = msg.text.as_deref().unwrap_or("");
+                                println!("[completed] #{} @{}: {}", channel_name, display_name, text);
                             }
                         }
                     }

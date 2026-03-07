@@ -73,6 +73,14 @@ pub struct ConversationsHistoryResponse {
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
+pub struct Reaction {
+    pub name: String,
+    pub users: Vec<String>,
+    pub count: u32,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct Message {
     pub ts: String,
     pub user: Option<String>,
@@ -80,9 +88,15 @@ pub struct Message {
     #[serde(rename = "type")]
     pub msg_type: Option<String>,
     pub subtype: Option<String>,
+    #[serde(default)]
+    pub reactions: Vec<Reaction>,
 }
 
 impl Message {
+    pub fn has_reaction(&self, name: &str) -> bool {
+        self.reactions.iter().any(|r| r.name == name)
+    }
+
     pub fn timestamp(&self) -> String {
         if let Some(dot) = self.ts.find('.')
             && let Ok(secs) = self.ts[..dot].parse::<u64>()
