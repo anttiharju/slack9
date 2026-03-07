@@ -1,16 +1,11 @@
+use indexmap::IndexMap;
 use serde::Deserialize;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
-#[derive(Debug, Deserialize)]
-pub struct ReactionsConfig {
-    pub backlog: Vec<String>,
-    pub taking_a_look: Vec<String>,
-    pub blocked: Vec<String>,
-    pub completed: Vec<String>,
-}
+pub type ReactionsConfig = IndexMap<String, Vec<String>>;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -28,6 +23,10 @@ impl Config {
     pub fn poll_interval_duration(&self) -> Result<Duration, String> {
         parse_duration(&self.poll_interval)
     }
+
+    pub fn last_status_index(&self) -> usize {
+        self.reactions.len() - 1
+    }
 }
 
 impl fmt::Display for Config {
@@ -37,10 +36,15 @@ impl fmt::Display for Config {
         writeln!(f, "  time_window: {}", self.time_window)?;
         writeln!(f, "  poll_interval: {}", self.poll_interval)?;
         writeln!(f, "  reactions:")?;
-        writeln!(f, "    backlog: {}", self.reactions.backlog.join(", "))?;
-        writeln!(f, "    taking_a_look: {}", self.reactions.taking_a_look.join(", "))?;
-        writeln!(f, "    blocked: {}", self.reactions.blocked.join(", "))?;
-        write!(f, "    completed: {}", self.reactions.completed.join(", "))
+        let last = self.reactions.len().saturating_sub(1);
+        for (i, (name, emojis)) in self.reactions.iter().enumerate() {
+            if i == last {
+                write!(f, "    {}: {}", name, emojis.join(", "))?;
+            } else {
+                writeln!(f, "    {}: {}", name, emojis.join(", "))?;
+            }
+        }
+        Ok(())
     }
 }
 
