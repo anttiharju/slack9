@@ -25,7 +25,14 @@ fn wave_level_at(d: usize) -> usize {
     7_usize.saturating_sub(d)
 }
 
-pub fn render(frame: &mut Frame, area: Rect, poll_interval: Option<Duration>, poll_elapsed: Option<Duration>, poll_label: Option<&str>) {
+pub fn render(
+    frame: &mut Frame,
+    area: Rect,
+    poll_interval: Option<Duration>,
+    poll_elapsed: Option<Duration>,
+    poll_label: Option<&str>,
+    workspace_label: Option<&str>,
+) {
     let logo_width = SMALL_LOGO.lines().map(|l| l.len()).max().unwrap_or(0) as u16;
     let lines: Vec<Line> = SMALL_LOGO
         .lines()
@@ -40,13 +47,29 @@ pub fn render(frame: &mut Frame, area: Rect, poll_interval: Option<Duration>, po
     let paragraph = Paragraph::new(lines);
     frame.render_widget(paragraph, logo_area);
 
-    // Poll interval label in top-left
-    if let Some(label) = poll_label {
+    // Workspace label in top-left
+    if let Some(ws) = workspace_label {
+        let short = ws
+            .trim_end_matches('/')
+            .split("//")
+            .last()
+            .and_then(|h| h.split('.').next())
+            .unwrap_or(ws);
         let label_line = Line::from(vec![
-            Span::styled("poll ", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
-            Span::styled(label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled("WORKSPACE ", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
+            Span::styled(short, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
         ]);
         let label_area = Rect::new(area.x, area.y, area.width.saturating_sub(logo_width + 1), 1);
+        frame.render_widget(Paragraph::new(label_line), label_area);
+    }
+
+    // Poll interval label on second line
+    if let Some(label) = poll_label {
+        let label_line = Line::from(vec![
+            Span::styled("POLL ", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
+            Span::styled(label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        ]);
+        let label_area = Rect::new(area.x, area.y + 1, area.width.saturating_sub(logo_width + 1), 1);
         frame.render_widget(Paragraph::new(label_line), label_area);
     }
 

@@ -320,6 +320,7 @@ impl App {
             let all_channels = &self.all_channels;
             let user_names = &self.user_names;
             let poll_label = self.config.poll_interval.clone();
+            let workspace_label = self.config.workspace_url.clone();
             let filter_snap = filter.clone();
             let fe = filter_editing;
             self.terminal
@@ -335,6 +336,7 @@ impl App {
                         user_names,
                         &mut list_state,
                         &poll_label,
+                        &workspace_label,
                     );
                 })
                 .expect("failed to draw");

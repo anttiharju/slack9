@@ -39,6 +39,7 @@ pub fn render(
         Some(poll_interval),
         poll_elapsed,
         Some(&config.poll_interval.to_string()),
+        Some(&config.workspace_url),
     );
     let content_area = outer[1];
 
