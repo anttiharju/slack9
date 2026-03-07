@@ -15,11 +15,13 @@ use std::time::{Duration, Instant};
 
 enum SelectResult {
     Channel(String, String),
+    Ping(String),
     Quit,
 }
 
 enum TrackResult {
     BackToSelect,
+    Ping(String),
     Quit,
 }
 
@@ -89,12 +91,20 @@ impl App {
         loop {
             let selected = match self.select_channel() {
                 SelectResult::Channel(id, name) => (id, name),
+                SelectResult::Ping(display_name) => match self.track_ping(&display_name) {
+                    TrackResult::Quit => break,
+                    TrackResult::BackToSelect | TrackResult::Ping(_) => continue,
+                },
                 SelectResult::Quit => break,
             };
 
-            match self.track_messages(selected) {
+            match self.track_messages_filtered(vec![selected], None) {
                 TrackResult::Quit => break,
                 TrackResult::BackToSelect => continue,
+                TrackResult::Ping(display_name) => match self.track_ping(&display_name) {
+                    TrackResult::Quit => break,
+                    TrackResult::BackToSelect | TrackResult::Ping(_) => continue,
+                },
             }
         }
 
@@ -167,6 +177,12 @@ impl App {
                                 && let Some(ch) = self.find_channel(name)
                             {
                                 return SelectResult::Channel(ch.0, ch.1);
+                            }
+                            let ping_arg = cmd.strip_prefix("ping ");
+                            if let Some(handle) = ping_arg
+                                && let Some(display_name) = self.client.find_user_display_name(handle)
+                            {
+                                return SelectResult::Ping(display_name);
                             }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
@@ -317,15 +333,15 @@ impl App {
         }
     }
 
-    fn track_messages(&mut self, initial_channel: (String, String)) -> TrackResult {
-        let mut channels: Vec<(String, String)> = vec![initial_channel];
+    fn track_messages_filtered(&mut self, initial_channels: Vec<(String, String)>, initial_filter: Option<String>) -> TrackResult {
+        let mut channels: Vec<(String, String)> = initial_channels;
         let mut messages: Vec<TrackedMessage> = Vec::new();
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut last_poll: Option<Instant> = None;
         let mut list_state = ListState::default();
         let mut pending_g: Option<char> = None;
         let mut count_buf: u32 = 0;
-        let mut filter = String::new();
+        let mut filter = initial_filter.unwrap_or_default();
         let mut filter_editing = false;
 
         loop {
@@ -371,13 +387,10 @@ impl App {
                             }
                             let ping_arg = cmd.strip_prefix("ping ");
                             if let Some(handle) = ping_arg
-                                && let Some(display_name) = self.client.find_user_display_name(handle) {
-                                    filter = format!("@{}", display_name);
-                                    filter_editing = false;
-                                    if visible_count > 0 {
-                                        list_state.select(Some(0));
-                                    }
-                                }
+                                && let Some(display_name) = self.client.find_user_display_name(handle)
+                            {
+                                return TrackResult::Ping(display_name);
+                            }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
                             self.command_buf = None;
@@ -628,6 +641,211 @@ impl App {
                         user_names,
                         &messages,
                         &channels,
+                        config,
+                        &mut list_state,
+                        pi,
+                        pe,
+                    );
+                })
+                .expect("failed to draw");
+        }
+    }
+
+    fn track_ping(&mut self, display_name: &str) -> TrackResult {
+        let user_id = self.client.find_user_id(display_name);
+        let search_query = match &user_id {
+            Some(id) => format!("<@{}>", id),
+            None => format!("@{}", display_name),
+        };
+
+        let mut messages: Vec<TrackedMessage> = Vec::new();
+        let mut seen: HashMap<String, usize> = HashMap::new();
+        let mut last_poll: Option<Instant> = None;
+        let mut list_state = ListState::default();
+        let mut pending_g: Option<char> = None;
+        let mut count_buf: u32 = 0;
+
+        let ping_label = format!("@{}", display_name);
+
+        loop {
+            let visible_count = messages.iter().filter(|m| m.status != model::Status::Completed).count();
+
+            if event::poll(Duration::from_millis(100)).unwrap_or(false)
+                && let Ok(Event::Key(key)) = event::read()
+                && key.kind == KeyEventKind::Press
+            {
+                if let Some(ref mut buf) = self.command_buf {
+                    match key.code {
+                        KeyCode::Enter => {
+                            let cmd = buf.trim().to_string();
+                            self.command_buf = None;
+                            if cmd == "q" || cmd == "q!" {
+                                return TrackResult::Quit;
+                            }
+                            if cmd == "c" || cmd == "channel" {
+                                return TrackResult::BackToSelect;
+                            }
+                            let ping_arg = cmd.strip_prefix("ping ");
+                            if let Some(handle) = ping_arg
+                                && let Some(name) = self.client.find_user_display_name(handle)
+                            {
+                                return TrackResult::Ping(name);
+                            }
+                        }
+                        KeyCode::Esc | KeyCode::Char('\x03') => {
+                            self.command_buf = None;
+                        }
+                        KeyCode::Backspace => {
+                            buf.pop();
+                            if buf.is_empty() {
+                                self.command_buf = None;
+                            }
+                        }
+                        KeyCode::Char(c) => {
+                            buf.push(c);
+                        }
+                        KeyCode::Tab => {
+                            input::tab_complete_channel(buf, &self.all_channels, &self.user_names);
+                        }
+                        _ => {}
+                    }
+                } else {
+                    match key.code {
+                        KeyCode::Char(c @ '0'..='9') => {
+                            if count_buf > 0 || c != '0' {
+                                count_buf = count_buf.saturating_mul(10).saturating_add(c as u32 - '0' as u32);
+                            }
+                        }
+                        KeyCode::Char(':') => {
+                            pending_g = None;
+                            count_buf = 0;
+                            self.command_buf = Some(String::new());
+                        }
+                        KeyCode::Up | KeyCode::Char('k') => {
+                            pending_g = None;
+                            let repeat = if count_buf == 0 { 1 } else { count_buf as usize };
+                            count_buf = 0;
+                            if visible_count > 0 {
+                                let current = list_state.selected().unwrap_or(0);
+                                let i = if repeat >= visible_count { 0 } else { current.saturating_sub(repeat) };
+                                list_state.select(Some(i));
+                            }
+                        }
+                        KeyCode::Down | KeyCode::Char('j') => {
+                            pending_g = None;
+                            let repeat = if count_buf == 0 { 1 } else { count_buf as usize };
+                            count_buf = 0;
+                            if visible_count > 0 {
+                                let current = list_state.selected().unwrap_or(0);
+                                let i = if current + repeat >= visible_count {
+                                    visible_count - 1
+                                } else {
+                                    current + repeat
+                                };
+                                list_state.select(Some(i));
+                            }
+                        }
+                        KeyCode::Char('g') => {
+                            count_buf = 0;
+                            if pending_g == Some('g') {
+                                if visible_count > 0 {
+                                    list_state.select(Some(0));
+                                }
+                                pending_g = None;
+                            } else {
+                                pending_g = Some('g');
+                            }
+                        }
+                        KeyCode::Char('G') => {
+                            count_buf = 0;
+                            if pending_g == Some('G') {
+                                if visible_count > 0 {
+                                    list_state.select(Some(visible_count - 1));
+                                }
+                                pending_g = None;
+                            } else {
+                                pending_g = Some('G');
+                            }
+                        }
+                        KeyCode::Enter => {
+                            pending_g = None;
+                            count_buf = 0;
+                            if let Some(selected) = list_state.selected() {
+                                let visible: Vec<&TrackedMessage> = messages.iter().filter(|m| m.status != model::Status::Completed).collect();
+                                if let Some(msg) = visible.get(selected) {
+                                    let ts_for_url = msg.ts.replace('.', "");
+                                    let url = format!("{}/archives/{}/p{}", self.workspace_url_for_links, msg.channel_id, ts_for_url);
+                                    let _ = std::process::Command::new("open").arg(&url).spawn();
+                                }
+                            }
+                        }
+                        KeyCode::Esc => {
+                            return TrackResult::BackToSelect;
+                        }
+                        _ => {
+                            pending_g = None;
+                            count_buf = 0;
+                        }
+                    }
+                }
+            }
+
+            if last_poll.is_none_or(|t| t.elapsed() >= self.poll_interval) {
+                last_poll = Some(Instant::now());
+
+                if let Ok(resp) = self.client.search_messages(&search_query)
+                    && let Some(search_msgs) = resp.messages
+                        && let Some(matches) = search_msgs.matches
+                    {
+                        for m in &matches {
+                            let status = model::determine_status_from_reactions(&m.reactions, &self.config.reactions);
+
+                            if let Some(&idx) = seen.get(&m.ts) {
+                                messages[idx].status = status;
+                            } else {
+                                let (channel_id, channel_name) = match &m.channel {
+                                    Some(ch) => (ch.id.clone(), ch.name.clone()),
+                                    None => ("unknown".to_string(), "unknown".to_string()),
+                                };
+                                let user_id_str = m.user.as_deref().unwrap_or("unknown");
+                                let resolved_name = self.client.resolve_user(user_id_str);
+                                let raw_text = m.text.as_deref().unwrap_or("").to_string();
+                                let text = self.resolve_mentions(&raw_text);
+
+                                seen.insert(m.ts.clone(), messages.len());
+                                messages.push(TrackedMessage {
+                                    channel_id,
+                                    channel_name,
+                                    ts: m.ts.clone(),
+                                    display_name: resolved_name,
+                                    text,
+                                    status,
+                                });
+                            }
+                        }
+                    }
+            }
+
+            let command_buf_snapshot = self.command_buf.clone();
+            let all_channels = &self.all_channels;
+            let user_names = &self.user_names;
+            let config = &self.config;
+            let pi = self.poll_interval;
+            let pe = last_poll.map(|t| t.elapsed());
+            let ping_label_snap = ping_label.clone();
+            self.terminal
+                .draw(|frame| {
+                    let area = frame.area();
+                    view::message_list::render(
+                        frame,
+                        area,
+                        command_buf_snapshot.as_deref(),
+                        false,
+                        &ping_label_snap,
+                        all_channels,
+                        user_names,
+                        &messages,
+                        &[],
                         config,
                         &mut list_state,
                         pi,

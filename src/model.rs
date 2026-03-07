@@ -1,5 +1,5 @@
 use crate::config::ReactionsConfig;
-use crate::slack::Message;
+use crate::slack::{Message, Reaction};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Status {
@@ -19,11 +19,16 @@ pub struct TrackedMessage {
 }
 
 pub fn determine_status(msg: &Message, reactions: &ReactionsConfig) -> Status {
-    if msg.has_any_reaction(&reactions.completed) {
+    determine_status_from_reactions(&msg.reactions, reactions)
+}
+
+pub fn determine_status_from_reactions(reactions: &[Reaction], config: &ReactionsConfig) -> Status {
+    let has_any = |names: &[String]| reactions.iter().any(|r| names.contains(&r.name));
+    if has_any(&config.completed) {
         Status::Completed
-    } else if msg.has_any_reaction(&reactions.blocked) {
+    } else if has_any(&config.blocked) {
         Status::Blocked
-    } else if msg.has_any_reaction(&reactions.taking_a_look) {
+    } else if has_any(&config.taking_a_look) {
         Status::TakingALook
     } else {
         Status::Backlog

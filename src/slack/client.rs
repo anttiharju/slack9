@@ -204,4 +204,31 @@ impl SlackClient {
             .json::<ConversationsHistoryResponse>()
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
+
+    /// Find user ID by display name (reverse lookup).
+    pub fn find_user_id(&self, display_name: &str) -> Option<String> {
+        let display_name = display_name.trim_start_matches('@');
+        self.users
+            .iter()
+            .find(|(_, name)| name.eq_ignore_ascii_case(display_name))
+            .map(|(id, _)| id.clone())
+    }
+
+    /// Search messages across all channels.
+    pub fn search_messages(&self, query: &str) -> Result<SearchMessagesResponse, String> {
+        let url = format!("{}/api/search.messages", self.workspace_url);
+
+        let response = self
+            .client
+            .post(&url)
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(COOKIE, format!("d={}", self.xoxd))
+            .body(format!("token={}&query={}&count=100&sort=timestamp&sort_dir=desc", self.xoxc, query))
+            .send()
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        response
+            .json::<SearchMessagesResponse>()
+            .map_err(|e| format!("Failed to parse response: {}", e))
+    }
 }

@@ -88,12 +88,35 @@ pub struct Message {
     pub reactions: Vec<Reaction>,
 }
 
-impl Message {
-    pub fn has_reaction(&self, name: &str) -> bool {
-        self.reactions.iter().any(|r| r.name == name)
-    }
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct SearchMessagesResponse {
+    pub ok: bool,
+    pub messages: Option<SearchMessages>,
+    pub error: Option<String>,
+}
 
-    pub fn has_any_reaction(&self, names: &[String]) -> bool {
-        names.iter().any(|n| self.has_reaction(n))
-    }
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct SearchMessages {
+    pub matches: Option<Vec<SearchMatch>>,
+    pub total: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct SearchMatch {
+    pub ts: String,
+    pub text: Option<String>,
+    pub user: Option<String>,
+    pub channel: Option<SearchChannel>,
+    #[serde(default)]
+    pub reactions: Vec<Reaction>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct SearchChannel {
+    pub id: String,
+    pub name: String,
 }
