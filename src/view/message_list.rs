@@ -68,15 +68,14 @@ pub fn render(
         .filter(|m| last_status != Some(m.status))
         .map(|m| {
             let mut spans = Vec::new();
-            if has_reactions
-                && let Some((name, _)) = config.reactions.get_index(m.status) {
-                    let label = name.replace('_', " ");
-                    let color = STATUS_COLORS[m.status % STATUS_COLORS.len()];
-                    spans.push(Span::styled(
-                        format!("[{:<14}] ", label),
-                        Style::default().fg(color).add_modifier(Modifier::BOLD),
-                    ));
-                }
+            if has_reactions && let Some((name, _)) = config.reactions.get_index(m.status) {
+                let label = name.replace('_', " ");
+                let color = STATUS_COLORS[m.status % STATUS_COLORS.len()];
+                spans.push(Span::styled(
+                    format!("[{:<14}] ", label),
+                    Style::default().fg(color).add_modifier(Modifier::BOLD),
+                ));
+            }
             spans.push(Span::styled(format!("#{} ", m.channel_name), Style::default().fg(Color::DarkGray)));
             spans.push(Span::styled(format!("@{}", m.display_name), Style::default().fg(Color::Rgb(255, 165, 0))));
             spans.push(Span::raw(format!(": {}", m.text)));
