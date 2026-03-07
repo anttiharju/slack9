@@ -4,7 +4,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding, Paragraph};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding};
 use std::time::Duration;
 
 use super::{command_bar, filter_bar, header};
@@ -29,29 +29,25 @@ pub fn render(
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(header::LOGO_HEIGHT + 1), Constraint::Min(1)])
+        .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Min(1)])
         .split(area);
 
-    header::render(frame, outer[0]);
+    header::render(frame, outer[0], Some(poll_interval), poll_elapsed);
     let content_area = outer[1];
 
     let chunks = if has_overlay {
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(1), Constraint::Length(1)])
+            .constraints([Constraint::Length(3), Constraint::Min(1)])
             .split(content_area)
     } else {
         Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1), Constraint::Length(1)])
+            .constraints([Constraint::Min(1)])
             .split(content_area)
     };
 
-    let (overlay_area, list_area, status_area) = if has_overlay {
-        (Some(chunks[0]), chunks[1], chunks[2])
-    } else {
-        (None, chunks[0], chunks[1])
-    };
+    let (overlay_area, list_area) = if has_overlay { (Some(chunks[0]), chunks[1]) } else { (None, chunks[0]) };
 
     if let Some(overlay_area) = overlay_area {
         if in_command_mode {
@@ -118,32 +114,4 @@ pub fn render(
         .highlight_symbol("> ");
 
     frame.render_stateful_widget(list, list_area, list_state);
-
-    let total_blocks = poll_interval.as_secs().max(1) as usize;
-    let spans = match poll_elapsed {
-        Some(elapsed) => {
-            let elapsed_secs = elapsed.as_secs() as usize;
-            if elapsed_secs < 1 {
-                // Just polled — flash all green
-                vec![Span::styled("\u{2588}".repeat(total_blocks), Style::default().fg(Color::Green))]
-            } else {
-                let remaining = total_blocks.saturating_sub(elapsed_secs);
-                let consumed = total_blocks - remaining;
-                let mut s = Vec::new();
-                if remaining > 0 {
-                    s.push(Span::styled("\u{2588}".repeat(remaining), Style::default().fg(Color::DarkGray)));
-                }
-                if consumed > 0 {
-                    s.push(Span::styled("\u{2591}".repeat(consumed), Style::default().fg(Color::DarkGray)));
-                }
-                s
-            }
-        }
-        None => {
-            // Haven't polled yet — show all dim
-            vec![Span::styled("\u{2591}".repeat(total_blocks), Style::default().fg(Color::DarkGray))]
-        }
-    };
-    let status_line = Paragraph::new(Line::from(spans));
-    frame.render_widget(status_line, status_area);
 }

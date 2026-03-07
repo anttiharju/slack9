@@ -21,10 +21,10 @@ pub fn render(
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(header::LOGO_HEIGHT + 1), Constraint::Min(1)])
+        .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Min(1)])
         .split(area);
 
-    header::render(frame, outer[0]);
+    header::render(frame, outer[0], None, None);
     let content_area = outer[1];
 
     let chunks = if has_overlay {
