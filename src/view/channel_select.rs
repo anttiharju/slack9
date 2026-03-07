@@ -6,6 +6,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding};
 
 use super::{command_bar, header};
 
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     area: Rect,

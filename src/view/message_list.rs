@@ -11,6 +11,7 @@ use super::{command_bar, header};
 
 const STATUS_COLORS: &[Color] = &[Color::Yellow, Color::Blue, Color::Red, Color::Green, Color::Magenta, Color::Cyan];
 
+#[allow(clippy::too_many_arguments)]
 pub fn render(
     frame: &mut Frame,
     area: Rect,
