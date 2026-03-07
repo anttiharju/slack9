@@ -634,6 +634,11 @@ impl App {
                 }
             }
 
+            // Select first item if nothing is selected yet
+            if list_state.selected().is_none() && !messages.is_empty() {
+                list_state.select(Some(0));
+            }
+
             let command_buf_snapshot = self.command_buf.clone();
             let all_channels = &self.all_channels;
             let user_names = &self.user_names;
@@ -847,6 +852,11 @@ impl App {
                         }
                     }
                 }
+            }
+
+            // Select first item if nothing is selected yet
+            if list_state.selected().is_none() && !messages.is_empty() {
+                list_state.select(Some(0));
             }
 
             let command_buf_snapshot = self.command_buf.clone();
