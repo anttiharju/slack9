@@ -2,18 +2,56 @@ use serde::Deserialize;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
     pub channels: Vec<String>,
     pub time_window: String,
+    pub poll_interval: String,
+}
+
+impl Config {
+    pub fn time_window_duration(&self) -> Result<Duration, String> {
+        parse_duration(&self.time_window)
+    }
+
+    pub fn poll_interval_duration(&self) -> Result<Duration, String> {
+        parse_duration(&self.poll_interval)
+    }
 }
 
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Config (~/slackemon.toml):")?;
         writeln!(f, "  channels: {}", self.channels.join(", "))?;
-        write!(f, "  time_window: {}", self.time_window)
+        writeln!(f, "  time_window: {}", self.time_window)?;
+        write!(f, "  poll_interval: {}", self.poll_interval)
+    }
+}
+
+fn parse_duration(s: &str) -> Result<Duration, String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("empty duration string".to_string());
+    }
+
+    let (num_str, unit) = if s.ends_with("ms") {
+        (&s[..s.len() - 2], "ms")
+    } else {
+        let split = s.find(|c: char| !c.is_ascii_digit()).unwrap_or(s.len());
+        (&s[..split], &s[split..])
+    };
+
+    let value: u64 = num_str.parse().map_err(|_| format!("invalid number in duration: '{}'", s))?;
+
+    match unit {
+        "s" => Ok(Duration::from_secs(value)),
+        "m" => Ok(Duration::from_secs(value * 60)),
+        "h" => Ok(Duration::from_secs(value * 3600)),
+        "d" => Ok(Duration::from_secs(value * 86400)),
+        "ms" => Ok(Duration::from_millis(value)),
+        _ => Err(format!("unknown duration unit '{}' in '{}'. Use s, m, h, d, or ms", unit, s)),
     }
 }
 

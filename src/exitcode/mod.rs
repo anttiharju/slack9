@@ -21,5 +21,9 @@ define_exitcodes! {
     missing_workspace_url => MissingWorkspaceUrl = 3,
     auth_rejected => AuthRejected = 4,
     request_failed => RequestFailed = 5,
-    config_error => ConfigError = 6,
+    config_load_error => ConfigLoadError = 6,
+    invalid_time_window => InvalidTimeWindow = 7,
+    invalid_poll_interval => InvalidPollInterval = 8,
+    channel_resolve_error => ChannelResolveError = 9,
+    user_load_error => UserLoadError = 10,
 }
