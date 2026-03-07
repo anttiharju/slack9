@@ -16,5 +16,9 @@ macro_rules! define_exitcodes {
 }
 
 define_exitcodes! {
-    example_error => PathError = 1,
+    missing_xoxd => MissingXoxd = 1,
+    missing_xoxc => MissingXoxc = 2,
+    missing_workspace_url => MissingWorkspaceUrl = 3,
+    auth_rejected => AuthRejected = 4,
+    request_failed => RequestFailed = 5,
 }
