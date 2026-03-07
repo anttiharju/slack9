@@ -30,7 +30,7 @@ pub struct App {
     config: Config,
     all_channels: Vec<(String, String)>,
     user_names: Vec<String>,
-    workspace_url_for_links: String,
+    team_id: String,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
     time_window: Duration,
@@ -42,7 +42,7 @@ impl App {
         client: SlackClient,
         config: Config,
         all_channels: Vec<(String, String)>,
-        workspace_url_for_links: String,
+        team_id: String,
         time_window: Duration,
         poll_interval: Duration,
     ) -> Self {
@@ -64,7 +64,7 @@ impl App {
             config,
             all_channels,
             user_names: Vec::new(),
-            workspace_url_for_links,
+            team_id,
             terminal,
             command_buf: None,
             time_window,
@@ -576,8 +576,7 @@ impl App {
                                     })
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
-                                    let ts_for_url = msg.ts.replace('.', "");
-                                    let url = format!("{}/archives/{}/p{}", self.workspace_url_for_links, msg.channel_id, ts_for_url);
+                                    let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
                                     let _ = std::process::Command::new("open").arg(&url).spawn();
                                 }
                             }
@@ -801,8 +800,7 @@ impl App {
                             if let Some(selected) = list_state.selected() {
                                 let visible: Vec<&TrackedMessage> = messages.iter().filter(|m| m.status != model::Status::Completed).collect();
                                 if let Some(msg) = visible.get(selected) {
-                                    let ts_for_url = msg.ts.replace('.', "");
-                                    let url = format!("{}/archives/{}/p{}", self.workspace_url_for_links, msg.channel_id, ts_for_url);
+                                    let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
                                     let _ = std::process::Command::new("open").arg(&url).spawn();
                                 }
                             }

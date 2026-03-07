@@ -41,12 +41,14 @@ fn main() {
         eprintln!("Error: SLACK9S_WORKSPACE_URL environment variable not set");
         std::process::exit(exitcode::missing_workspace_url());
     });
-    let workspace_url_for_links = workspace_url.trim_end_matches('/').to_string();
 
     let mut client = slack::SlackClient::new(workspace_url, xoxd, xoxc);
 
-    match client.auth_test() {
-        Ok(response) if response.ok => {}
+    let team_id = match client.auth_test() {
+        Ok(response) if response.ok => response.team_id.unwrap_or_else(|| {
+            eprintln!("Error: auth.test did not return a team_id");
+            std::process::exit(exitcode::auth_rejected());
+        }),
         Ok(response) => {
             eprintln!("Auth failed: {}", response.error.unwrap_or_else(|| "unknown error".to_string()));
             std::process::exit(exitcode::auth_rejected());
@@ -55,7 +57,7 @@ fn main() {
             eprintln!("{}", e);
             std::process::exit(exitcode::request_failed());
         }
-    }
+    };
 
     client.load_users().unwrap_or_else(|e| {
         eprintln!("Error loading users: {}", e);
@@ -67,6 +69,6 @@ fn main() {
         std::process::exit(exitcode::channel_resolve_error());
     });
 
-    let app = app::App::new(client, config, all_channels, workspace_url_for_links, time_window, poll_interval);
+    let app = app::App::new(client, config, all_channels, team_id, time_window, poll_interval);
     app.run();
 }
