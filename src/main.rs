@@ -24,6 +24,14 @@ fn main() {
         std::process::exit(exitcode::invalid_poll_interval());
     });
 
+    let workspace_url = env::var("SLACK9S_WORKSPACE").unwrap_or_else(|_| {
+        if !config.workspace_url.is_empty() {
+            return config.workspace_url.clone();
+        }
+        eprintln!("Error: SLACK9S_WORKSPACE environment variable not set");
+        std::process::exit(exitcode::missing_workspace());
+    });
+
     let xoxd = env::var("SLACK9S_XOXD").unwrap_or_else(|_| {
         eprintln!("Error: SLACK9S_XOXD environment variable not set");
         std::process::exit(exitcode::missing_xoxd());
@@ -33,8 +41,6 @@ fn main() {
         eprintln!("Error: SLACK9S_XOXC environment variable not set");
         std::process::exit(exitcode::missing_xoxc());
     });
-
-    let workspace_url = config.workspace_url.clone();
 
     let mut client = slack::SlackClient::new(workspace_url, xoxd, xoxc);
 

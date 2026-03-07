@@ -16,6 +16,7 @@ macro_rules! define_exitcodes {
 }
 
 define_exitcodes! {
+    missing_workspace => MissingWorkspace = 3,
     missing_xoxd => MissingXoxd = 1,
     missing_xoxc => MissingXoxc = 2,
     auth_rejected => AuthRejected = 4,
