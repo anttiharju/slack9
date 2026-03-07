@@ -43,6 +43,13 @@ pub struct App {
     poll: Duration,
 }
 
+impl Drop for App {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = crossterm::execute!(self.terminal.backend_mut(), LeaveAlternateScreen);
+    }
+}
+
 impl App {
     pub fn new(
         client: SlackClient,
@@ -115,9 +122,6 @@ impl App {
                 },
             }
         }
-
-        disable_raw_mode().expect("failed to disable raw mode");
-        crossterm::execute!(self.terminal.backend_mut(), LeaveAlternateScreen).expect("failed to leave alternate screen");
     }
 
     fn resolve_mentions(&self, text: &str) -> String {
