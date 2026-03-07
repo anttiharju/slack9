@@ -31,6 +31,7 @@ pub struct App {
     all_channels: Vec<(String, String)>,
     user_names: Vec<String>,
     team_id: String,
+    team_name: String,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
     time_window: Duration,
@@ -43,6 +44,7 @@ impl App {
         config: Config,
         all_channels: Vec<(String, String)>,
         team_id: String,
+        team_name: String,
         time_window: Duration,
         poll_interval: Duration,
     ) -> Self {
@@ -65,6 +67,7 @@ impl App {
             all_channels,
             user_names: Vec::new(),
             team_id,
+            team_name,
             terminal,
             command_buf: None,
             time_window,
@@ -320,7 +323,8 @@ impl App {
             let all_channels = &self.all_channels;
             let user_names = &self.user_names;
             let poll_label = self.config.poll_interval.clone();
-            let workspace_label = self.config.workspace_url.clone();
+            let workspace_label = self.team_name.clone();
+            let time_window_label = self.config.time_window.clone();
             let filter_snap = filter.clone();
             let fe = filter_editing;
             self.terminal
@@ -337,6 +341,7 @@ impl App {
                         &mut list_state,
                         &poll_label,
                         &workspace_label,
+                        &time_window_label,
                     );
                 })
                 .expect("failed to draw");
@@ -648,6 +653,7 @@ impl App {
             let fe = filter_editing;
             let pi = self.poll_interval;
             let pe = last_poll.map(|t| t.elapsed());
+            let team_name = &self.team_name;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -665,6 +671,7 @@ impl App {
                         &mut list_state,
                         pi,
                         pe,
+                        team_name,
                     );
                 })
                 .expect("failed to draw");
@@ -866,6 +873,7 @@ impl App {
             let pi = self.poll_interval;
             let pe = last_poll.map(|t| t.elapsed());
             let ping_label_snap = search_label.clone();
+            let team_name = &self.team_name;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -883,6 +891,7 @@ impl App {
                         &mut list_state,
                         pi,
                         pe,
+                        team_name,
                     );
                 })
                 .expect("failed to draw");

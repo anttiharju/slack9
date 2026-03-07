@@ -23,6 +23,7 @@ pub fn render(
     list_state: &mut ListState,
     poll_interval: Duration,
     poll_elapsed: Option<Duration>,
+    team_name: &str,
 ) {
     let in_command_mode = command_buf.is_some();
     let in_filter_mode = filter_editing;
@@ -39,7 +40,8 @@ pub fn render(
         Some(poll_interval),
         poll_elapsed,
         Some(&config.poll_interval.to_string()),
-        Some(&config.workspace_url),
+        Some(team_name),
+        Some(&config.time_window),
     );
     let content_area = outer[1];
 
