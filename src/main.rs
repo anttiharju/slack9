@@ -37,10 +37,7 @@ fn main() {
         std::process::exit(exitcode::missing_xoxc());
     });
 
-    let workspace_url = env::var("SLACK9S_WORKSPACE_URL").unwrap_or_else(|_| {
-        eprintln!("Error: SLACK9S_WORKSPACE_URL environment variable not set");
-        std::process::exit(exitcode::missing_workspace_url());
-    });
+    let workspace_url = config.workspace_url.clone();
 
     let mut client = slack::SlackClient::new(workspace_url, xoxd, xoxc);
 
