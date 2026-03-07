@@ -12,10 +12,7 @@ use std::env;
 fn main() {
     cli::parse_args();
 
-    let config = config::load().unwrap_or_else(|e| {
-        eprintln!("Error: {}", e);
-        std::process::exit(exitcode::config_load_error());
-    });
+    let config = config::load();
 
     let time_window = config.time_window_duration().unwrap_or_else(|e| {
         eprintln!("Error: invalid time_window: {}", e);

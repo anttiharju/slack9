@@ -62,19 +62,25 @@ pub fn render(
     }
 
     let last_status = config.last_status_index();
+    let has_reactions = !config.reactions.is_empty();
     let items: Vec<ListItem> = messages
         .iter()
-        .filter(|m| m.status != last_status)
+        .filter(|m| last_status != Some(m.status))
         .map(|m| {
-            let (name, _) = config.reactions.get_index(m.status).unwrap();
-            let label = name.replace('_', " ");
-            let color = STATUS_COLORS[m.status % STATUS_COLORS.len()];
-            ListItem::new(Line::from(vec![
-                Span::styled(format!("[{:<14}] ", label), Style::default().fg(color).add_modifier(Modifier::BOLD)),
-                Span::styled(format!("#{} ", m.channel_name), Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("@{}", m.display_name), Style::default().fg(Color::Rgb(255, 165, 0))),
-                Span::raw(format!(": {}", m.text)),
-            ]))
+            let mut spans = Vec::new();
+            if has_reactions
+                && let Some((name, _)) = config.reactions.get_index(m.status) {
+                    let label = name.replace('_', " ");
+                    let color = STATUS_COLORS[m.status % STATUS_COLORS.len()];
+                    spans.push(Span::styled(
+                        format!("[{:<14}] ", label),
+                        Style::default().fg(color).add_modifier(Modifier::BOLD),
+                    ));
+                }
+            spans.push(Span::styled(format!("#{} ", m.channel_name), Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled(format!("@{}", m.display_name), Style::default().fg(Color::Rgb(255, 165, 0))));
+            spans.push(Span::raw(format!(": {}", m.text)));
+            ListItem::new(Line::from(spans))
         })
         .collect();
 

@@ -280,7 +280,7 @@ impl App {
         let last_status = self.config.last_status_index();
 
         loop {
-            let visible_count = messages.iter().filter(|m| m.status != last_status).count();
+            let visible_count = messages.iter().filter(|m| last_status != Some(m.status)).count();
 
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
                 && let Ok(Event::Key(key)) = event::read()
@@ -399,7 +399,7 @@ impl App {
                             pending_g = None;
                             count_buf = 0;
                             if let Some(selected) = list_state.selected() {
-                                let visible: Vec<&TrackedMessage> = messages.iter().filter(|m| m.status != last_status).collect();
+                                let visible: Vec<&TrackedMessage> = messages.iter().filter(|m| last_status != Some(m.status)).collect();
                                 if let Some(msg) = visible.get(selected) {
                                     let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
                                     let _ = std::process::Command::new("open").arg(&url).spawn();
@@ -504,7 +504,7 @@ impl App {
         let last_status = self.config.last_status_index();
 
         loop {
-            let visible_count = messages.iter().filter(|m| m.status != last_status).count();
+            let visible_count = messages.iter().filter(|m| last_status != Some(m.status)).count();
 
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
                 && let Ok(Event::Key(key)) = event::read()
@@ -613,7 +613,7 @@ impl App {
                             pending_g = None;
                             count_buf = 0;
                             if let Some(selected) = list_state.selected() {
-                                let visible: Vec<&TrackedMessage> = messages.iter().filter(|m| m.status != last_status).collect();
+                                let visible: Vec<&TrackedMessage> = messages.iter().filter(|m| last_status != Some(m.status)).collect();
                                 if let Some(msg) = visible.get(selected) {
                                     let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
                                     let _ = std::process::Command::new("open").arg(&url).spawn();

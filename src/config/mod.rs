@@ -7,12 +7,24 @@ use std::time::Duration;
 
 pub type ReactionsConfig = IndexMap<String, Vec<String>>;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Config {
+    #[serde(default)]
     pub workspace_url: String,
+    #[serde(default = "default_time_window")]
     pub time_window: String,
+    #[serde(default = "default_poll_interval")]
     pub poll_interval: String,
+    #[serde(default)]
     pub reactions: ReactionsConfig,
+}
+
+fn default_time_window() -> String {
+    "24h".to_string()
+}
+
+fn default_poll_interval() -> String {
+    "10s".to_string()
 }
 
 impl Config {
@@ -24,24 +36,42 @@ impl Config {
         parse_duration(&self.poll_interval)
     }
 
-    pub fn last_status_index(&self) -> usize {
-        self.reactions.len() - 1
+    /// Returns the index of the last reaction status (the "done" status that hides messages),
+    /// or `None` if no reactions are configured.
+    pub fn last_status_index(&self) -> Option<usize> {
+        if self.reactions.is_empty() {
+            None
+        } else {
+            Some(self.reactions.len() - 1)
+        }
     }
 }
 
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Config (~/slack9s.toml):")?;
-        writeln!(f, "  workspace_url: {}", self.workspace_url)?;
+        writeln!(f, "Config (~/.slack9s.toml):")?;
+        writeln!(
+            f,
+            "  workspace_url: {}",
+            if self.workspace_url.is_empty() {
+                "(not set)"
+            } else {
+                &self.workspace_url
+            }
+        )?;
         writeln!(f, "  time_window: {}", self.time_window)?;
         writeln!(f, "  poll_interval: {}", self.poll_interval)?;
-        writeln!(f, "  reactions:")?;
-        let last = self.reactions.len().saturating_sub(1);
-        for (i, (name, emojis)) in self.reactions.iter().enumerate() {
-            if i == last {
-                write!(f, "    {}: {}", name, emojis.join(", "))?;
-            } else {
-                writeln!(f, "    {}: {}", name, emojis.join(", "))?;
+        if self.reactions.is_empty() {
+            write!(f, "  reactions: (none)")?;
+        } else {
+            writeln!(f, "  reactions:")?;
+            let last = self.reactions.len().saturating_sub(1);
+            for (i, (name, emojis)) in self.reactions.iter().enumerate() {
+                if i == last {
+                    write!(f, "    {}: {}", name, emojis.join(", "))?;
+                } else {
+                    writeln!(f, "    {}: {}", name, emojis.join(", "))?;
+                }
             }
         }
         Ok(())
@@ -73,12 +103,21 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
     }
 }
 
-pub fn load() -> Result<Config, String> {
-    let path = config_path()?;
+pub fn load() -> Config {
+    let path = match config_path() {
+        Ok(p) => p,
+        Err(_) => return Config::default(),
+    };
 
-    let contents = fs::read_to_string(&path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    let contents = match fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return Config::default(),
+    };
 
-    toml::from_str(&contents).map_err(|e| format!("Failed to parse {}: {}", path.display(), e))
+    toml::from_str(&contents).unwrap_or_else(|e| {
+        eprintln!("Warning: failed to parse {}: {}", path.display(), e);
+        Config::default()
+    })
 }
 
 fn config_path() -> Result<PathBuf, String> {
