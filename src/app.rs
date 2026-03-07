@@ -1,6 +1,6 @@
 use crate::config::Config;
 use crate::input;
-use crate::model::{self, TrackedMessage};
+use crate::model::TrackedMessage;
 use crate::slack::SlackClient;
 use crate::view;
 
@@ -277,10 +277,8 @@ impl App {
         let mut pending_g: Option<char> = None;
         let mut count_buf: u32 = 0;
 
-        let last_status = self.config.last_status_index();
-
         loop {
-            let visible_count = messages.iter().filter(|m| last_status != Some(m.status)).count();
+            let visible_count = messages.len();
 
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
                 && let Ok(Event::Key(key)) = event::read()
@@ -398,12 +396,11 @@ impl App {
                         KeyCode::Enter => {
                             pending_g = None;
                             count_buf = 0;
-                            if let Some(selected) = list_state.selected() {
-                                let visible: Vec<&TrackedMessage> = messages.iter().filter(|m| last_status != Some(m.status)).collect();
-                                if let Some(msg) = visible.get(selected) {
-                                    let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
-                                    let _ = std::process::Command::new("open").arg(&url).spawn();
-                                }
+                            if let Some(selected) = list_state.selected()
+                                && let Some(msg) = messages.get(selected)
+                            {
+                                let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
+                                let _ = std::process::Command::new("open").arg(&url).spawn();
                             }
                         }
                         KeyCode::Esc => {
@@ -425,10 +422,8 @@ impl App {
                         && let Some(msgs) = resp.messages
                     {
                         for msg in msgs.iter().rev() {
-                            let status = model::determine_status(msg, &self.config.reactions);
-
-                            if let Some(&idx) = seen.get(&msg.ts) {
-                                messages[idx].status = status;
+                            if seen.contains_key(&msg.ts) {
+                                continue;
                             } else {
                                 let user_id = msg.user.as_deref().unwrap_or("unknown");
                                 let display_name = self.client.resolve_user(user_id);
@@ -442,7 +437,6 @@ impl App {
                                     ts: msg.ts.clone(),
                                     display_name,
                                     text,
-                                    status,
                                 });
                             }
                         }
@@ -501,10 +495,8 @@ impl App {
         let mut pending_g: Option<char> = None;
         let mut count_buf: u32 = 0;
 
-        let last_status = self.config.last_status_index();
-
         loop {
-            let visible_count = messages.iter().filter(|m| last_status != Some(m.status)).count();
+            let visible_count = messages.len();
 
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
                 && let Ok(Event::Key(key)) = event::read()
@@ -612,12 +604,11 @@ impl App {
                         KeyCode::Enter => {
                             pending_g = None;
                             count_buf = 0;
-                            if let Some(selected) = list_state.selected() {
-                                let visible: Vec<&TrackedMessage> = messages.iter().filter(|m| last_status != Some(m.status)).collect();
-                                if let Some(msg) = visible.get(selected) {
-                                    let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
-                                    let _ = std::process::Command::new("open").arg(&url).spawn();
-                                }
+                            if let Some(selected) = list_state.selected()
+                                && let Some(msg) = messages.get(selected)
+                            {
+                                let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
+                                let _ = std::process::Command::new("open").arg(&url).spawn();
                             }
                         }
                         KeyCode::Esc => {
@@ -639,10 +630,8 @@ impl App {
                     && let Some(matches) = search_msgs.matches
                 {
                     for m in &matches {
-                        let status = model::determine_status_from_reactions(&m.reactions, &self.config.reactions);
-
-                        if let Some(&idx) = seen.get(&m.ts) {
-                            messages[idx].status = status;
+                        if seen.contains_key(&m.ts) {
+                            continue;
                         } else {
                             let (channel_id, channel_name) = match &m.channel {
                                 Some(ch) => (ch.id.clone(), ch.name.clone()),
@@ -660,7 +649,6 @@ impl App {
                                 ts: m.ts.clone(),
                                 display_name: resolved_name,
                                 text,
-                                status,
                             });
                         }
                     }

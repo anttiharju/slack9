@@ -69,14 +69,6 @@ pub struct ConversationsHistoryResponse {
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct Reaction {
-    pub name: String,
-    pub users: Vec<String>,
-    pub count: u32,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct Message {
     pub ts: String,
     pub user: Option<String>,
@@ -84,8 +76,6 @@ pub struct Message {
     #[serde(rename = "type")]
     pub msg_type: Option<String>,
     pub subtype: Option<String>,
-    #[serde(default)]
-    pub reactions: Vec<Reaction>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,8 +100,6 @@ pub struct SearchMatch {
     pub text: Option<String>,
     pub user: Option<String>,
     pub channel: Option<SearchChannel>,
-    #[serde(default)]
-    pub reactions: Vec<Reaction>,
 }
 
 #[derive(Debug, Deserialize)]

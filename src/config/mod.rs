@@ -1,11 +1,8 @@
-use indexmap::IndexMap;
 use serde::Deserialize;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
-
-pub type ReactionsConfig = IndexMap<String, Vec<String>>;
 
 #[derive(Debug, Default, Deserialize)]
 pub struct Config {
@@ -15,8 +12,6 @@ pub struct Config {
     pub time_window: String,
     #[serde(default = "default_poll_interval")]
     pub poll_interval: String,
-    #[serde(default)]
-    pub reactions: ReactionsConfig,
 }
 
 fn default_time_window() -> String {
@@ -35,16 +30,6 @@ impl Config {
     pub fn poll_interval_duration(&self) -> Result<Duration, String> {
         parse_duration(&self.poll_interval)
     }
-
-    /// Returns the index of the last reaction status (the "done" status that hides messages),
-    /// or `None` if no reactions are configured.
-    pub fn last_status_index(&self) -> Option<usize> {
-        if self.reactions.is_empty() {
-            None
-        } else {
-            Some(self.reactions.len() - 1)
-        }
-    }
 }
 
 impl fmt::Display for Config {
@@ -60,20 +45,7 @@ impl fmt::Display for Config {
             }
         )?;
         writeln!(f, "  time_window: {}", self.time_window)?;
-        writeln!(f, "  poll_interval: {}", self.poll_interval)?;
-        if self.reactions.is_empty() {
-            write!(f, "  reactions: (none)")?;
-        } else {
-            writeln!(f, "  reactions:")?;
-            let last = self.reactions.len().saturating_sub(1);
-            for (i, (name, emojis)) in self.reactions.iter().enumerate() {
-                if i == last {
-                    write!(f, "    {}: {}", name, emojis.join(", "))?;
-                } else {
-                    writeln!(f, "    {}: {}", name, emojis.join(", "))?;
-                }
-            }
-        }
+        write!(f, "  poll_interval: {}", self.poll_interval)?;
         Ok(())
     }
 }
