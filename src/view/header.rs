@@ -51,7 +51,7 @@ pub fn render(
     // Workspace label in top-left
     if let Some(name) = workspace_label {
         let label_line = Line::from(vec![
-            Span::styled("Work ", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
+            Span::styled("Workspace ", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
             Span::styled(name, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
         ]);
         let label_area = Rect::new(area.x, area.y, area.width.saturating_sub(logo_width + 1), 1);
