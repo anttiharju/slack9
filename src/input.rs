@@ -1,17 +1,23 @@
-pub fn tab_complete_channel(buf: &mut String, channels: &[(String, String)]) {
-    let (prefix, partial) = if let Some(rest) = buf.strip_prefix("channel ") {
-        ("channel ", rest.trim_start_matches('#'))
+pub fn tab_complete_channel(buf: &mut String, channels: &[(String, String)], user_names: &[String]) {
+    let (prefix, partial, candidates): (&str, &str, Vec<&str>) = if let Some(rest) = buf.strip_prefix("channel ") {
+        (
+            "channel ",
+            rest.trim_start_matches('#'),
+            channels.iter().map(|(_, name)| name.as_str()).collect(),
+        )
     } else if let Some(rest) = buf.strip_prefix("c ") {
-        ("c ", rest.trim_start_matches('#'))
+        (
+            "c ",
+            rest.trim_start_matches('#'),
+            channels.iter().map(|(_, name)| name.as_str()).collect(),
+        )
+    } else if let Some(rest) = buf.strip_prefix("ping ") {
+        ("ping ", rest.trim_start_matches('@'), user_names.iter().map(|s| s.as_str()).collect())
     } else {
         return;
     };
 
-    let matches: Vec<&str> = channels
-        .iter()
-        .map(|(_, name)| name.as_str())
-        .filter(|name| name.starts_with(partial))
-        .collect();
+    let matches: Vec<&str> = candidates.iter().copied().filter(|name| name.starts_with(partial)).collect();
 
     if matches.len() == 1 {
         buf.clear();
@@ -30,11 +36,13 @@ pub fn tab_complete_channel(buf: &mut String, channels: &[(String, String)]) {
     }
 }
 
-pub fn ghost_completion(buf: &str, channels: &[(String, String)]) -> String {
-    let partial = if let Some(rest) = buf.strip_prefix("channel ") {
-        rest.trim_start_matches('#')
+pub fn ghost_completion(buf: &str, channels: &[(String, String)], user_names: &[String]) -> String {
+    let (partial, candidates): (&str, Vec<&str>) = if let Some(rest) = buf.strip_prefix("channel ") {
+        (rest.trim_start_matches('#'), channels.iter().map(|(_, name)| name.as_str()).collect())
     } else if let Some(rest) = buf.strip_prefix("c ") {
-        rest.trim_start_matches('#')
+        (rest.trim_start_matches('#'), channels.iter().map(|(_, name)| name.as_str()).collect())
+    } else if let Some(rest) = buf.strip_prefix("ping ") {
+        (rest.trim_start_matches('@'), user_names.iter().map(|s| s.as_str()).collect())
     } else {
         return String::new();
     };
@@ -43,11 +51,7 @@ pub fn ghost_completion(buf: &str, channels: &[(String, String)]) -> String {
         return String::new();
     }
 
-    let matches: Vec<&str> = channels
-        .iter()
-        .map(|(_, name)| name.as_str())
-        .filter(|name| name.starts_with(partial))
-        .collect();
+    let matches: Vec<&str> = candidates.iter().copied().filter(|name| name.starts_with(partial)).collect();
 
     if matches.len() == 1 {
         matches[0][partial.len()..].to_string()

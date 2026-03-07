@@ -13,6 +13,7 @@ pub fn render(
     filter_editing: bool,
     filter: &str,
     all_channels: &[(String, String)],
+    user_names: &[String],
     list_state: &mut ListState,
 ) {
     let in_command_mode = command_buf.is_some();
@@ -43,7 +44,7 @@ pub fn render(
 
     if let Some(overlay_area) = overlay_area {
         if in_command_mode {
-            command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), all_channels);
+            command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), all_channels, user_names);
         } else if in_filter_mode {
             filter_bar::render(frame, overlay_area, filter);
         }

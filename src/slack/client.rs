@@ -27,9 +27,42 @@ impl SlackClient {
         self.users.get(user_id).cloned().unwrap_or_else(|| user_id.to_string())
     }
 
+    /// Find user display name by handle (matches against display names and user IDs).
+    /// Returns the display name if found.
+    pub fn find_user_display_name(&self, handle: &str) -> Option<String> {
+        let handle = handle.trim_start_matches('@');
+        // Exact match on display name
+        if let Some(name) = self.users.values().find(|name| name.eq_ignore_ascii_case(handle)) {
+            return Some(name.clone());
+        }
+        // Exact match on user ID
+        if let Some(name) = self.users.get(handle) {
+            return Some(name.clone());
+        }
+        // Prefix match on display name
+        let handle_lower = handle.to_lowercase();
+        let matches: Vec<_> = self
+            .users
+            .values()
+            .filter(|name| name.to_lowercase().starts_with(&handle_lower))
+            .collect();
+        if matches.len() == 1 {
+            return Some(matches[0].clone());
+        }
+        None
+    }
+
     pub fn load_users(&mut self) -> Result<(), String> {
         self.users = self.fetch_all_users()?;
         Ok(())
+    }
+
+    /// Returns all user display names, sorted.
+    pub fn user_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = self.users.values().cloned().collect();
+        names.sort();
+        names.dedup();
+        names
     }
 
     fn fetch_all_users(&self) -> Result<HashMap<String, String>, String> {

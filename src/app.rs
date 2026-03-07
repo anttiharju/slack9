@@ -27,6 +27,7 @@ pub struct App {
     client: SlackClient,
     config: Config,
     all_channels: Vec<(String, String)>,
+    user_names: Vec<String>,
     workspace_url_for_links: String,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
@@ -60,6 +61,7 @@ impl App {
             client,
             config,
             all_channels,
+            user_names: Vec::new(),
             workspace_url_for_links,
             terminal,
             command_buf: None,
@@ -69,6 +71,8 @@ impl App {
     }
 
     pub fn run(mut self) {
+        self.user_names = self.client.user_names();
+
         // Show splash screen for 1 second
         let splash_start = Instant::now();
         while splash_start.elapsed() < Duration::from_secs(1) {
@@ -178,7 +182,7 @@ impl App {
                             buf.push(c);
                         }
                         KeyCode::Tab => {
-                            input::tab_complete_channel(buf, &self.all_channels);
+                            input::tab_complete_channel(buf, &self.all_channels, &self.user_names);
                         }
                         _ => {}
                     }
@@ -292,6 +296,7 @@ impl App {
 
             let command_buf_snapshot = self.command_buf.clone();
             let all_channels = &self.all_channels;
+            let user_names = &self.user_names;
             let filter_snap = filter.clone();
             let fe = filter_editing;
             self.terminal
@@ -304,6 +309,7 @@ impl App {
                         fe,
                         &filter_snap,
                         all_channels,
+                        user_names,
                         &mut list_state,
                     );
                 })
@@ -363,6 +369,15 @@ impl App {
                                 filter.clear();
                                 filter_editing = false;
                             }
+                            let ping_arg = cmd.strip_prefix("ping ");
+                            if let Some(handle) = ping_arg
+                                && let Some(display_name) = self.client.find_user_display_name(handle) {
+                                    filter = format!("@{}", display_name);
+                                    filter_editing = false;
+                                    if visible_count > 0 {
+                                        list_state.select(Some(0));
+                                    }
+                                }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
                             self.command_buf = None;
@@ -377,7 +392,7 @@ impl App {
                             buf.push(c);
                         }
                         KeyCode::Tab => {
-                            input::tab_complete_channel(buf, &self.all_channels);
+                            input::tab_complete_channel(buf, &self.all_channels, &self.user_names);
                         }
                         _ => {}
                     }
@@ -594,6 +609,7 @@ impl App {
 
             let command_buf_snapshot = self.command_buf.clone();
             let all_channels = &self.all_channels;
+            let user_names = &self.user_names;
             let config = &self.config;
             let filter_snap = filter.clone();
             let fe = filter_editing;
@@ -609,6 +625,7 @@ impl App {
                         fe,
                         &filter_snap,
                         all_channels,
+                        user_names,
                         &messages,
                         &channels,
                         config,
