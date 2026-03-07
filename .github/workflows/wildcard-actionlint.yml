@@ -1,0 +1,18 @@
+permissions:
+  contents: none
+  pull-requests: none
+on:
+  push:
+    branches:
+      - wildcard
+    paths:
+      - ".github/workflows/*.yml"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/wildcard-actionlint.yml"
+jobs:
+  wildcard:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          true

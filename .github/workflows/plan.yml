@@ -1,0 +1,238 @@
+name: Plan
+permissions:
+  contents: write
+  pull-requests: none
+on:
+  pull_request:
+    # https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#pull_request
+    # defaults: opened, synchronize, reopened
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_call:
+    outputs:
+      version:
+        description: "Version for the next release. Empty if no release is needed."
+        value: ${{ jobs.validate.outputs.version || '' }}
+      documentation:
+        description: "Whether to update the documentation website"
+        value: ${{ jobs.validate.outputs.documentation_changed == 'true' }}
+      container:
+        description: "Image in which all CI jobs should be ran"
+        value: ${{ jobs.container.outputs.image }}
+    secrets:
+      ANTTIHARJU_BOT_ID:
+        required: true
+      ANTTIHARJU_BOT_PRIVATE_KEY:
+        required: true
+
+jobs:
+  container:
+    if: github.event.repository.name != 'rust-starter'
+    name: Container
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    steps:
+      - name: Find changes
+        id: changes
+        uses: anttiharju/find-changes-action@v1
+      - name: Compare changes
+        id: flake
+        uses: anttiharju/compare-changes-action@v0
+        with:
+          github-workflows-wildcard: flake.yml
+          changes: ${{ steps.changes.outputs.array }}
+      - if: steps.flake.outputs.changed == 'true'
+        name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+          extra_nix_config: |
+            trusted-substituters = https://cache.nixos.org https://nix-community.cachix.org https://anttiharju.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= anttiharju.cachix.org-1:1/w1vNdGsG6EynEoWhjJLJ2rxqde2BP+wkKM+YdOxMQ=
+            accept-flake-config = true
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+      - if: steps.flake.outputs.changed == 'true'
+        name: Parse container version
+        id: container
+        run: |
+          version=current
+          echo "version=$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          image_id="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-ci"
+          image_id="$(echo "$image_id" | tr '[:upper:]' '[:lower:]')"
+          echo "image_id=$image_id"
+          echo "image_id=$image_id" >> "$GITHUB_OUTPUT"
+      - if: steps.flake.outputs.changed == 'true'
+        run: |
+          nix build .#ci
+      - if: steps.flake.outputs.changed == 'true'
+        run: |
+          ./result | docker load
+      - if: steps.flake.outputs.changed == 'true'
+        name: Tag image
+        id: tag
+        env:
+          image_id: ${{ steps.container.outputs.image_id }}
+          version: ${{ steps.container.outputs.version }}
+          latest: ${{ github.event_name == 'pull_request' && steps.container.outputs.version || 'latest' }}
+        run: |
+          docker tag "ci:$version" "$image_id:$latest"
+          echo "image=$image_id:$latest"
+          echo "image=$image_id:$latest" >> "$GITHUB_OUTPUT"
+      - if: steps.flake.outputs.changed == 'true'
+        name: Log in to registry
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - if: steps.flake.outputs.changed == 'true'
+        name: Push image
+        env:
+          image: ${{ steps.tag.outputs.image }}
+        run: |
+          local_digest="$(docker inspect "$image" --format='{{.Id}}')"
+          remote_digest="$(docker manifest inspect "$image" | jq -r '.config.digest')"
+          if [[ "$local_digest" != "$remote_digest" ]]; then
+            docker push "$image"
+          fi
+      - if: steps.flake.outputs.changed == 'true' && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        name: Delete untagged versions
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ github.event.repository.name }}-ci
+          package-type: container
+          min-versions-to-keep: 1
+          delete-only-untagged-versions: false
+    outputs:
+      image: ${{ steps.tag.outputs.image }}
+
+  validate:
+    name: Validate
+    needs: container
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    container:
+      image: ${{ needs.container.outputs.image || format('ghcr.io/{0}/{1}-ci:latest', github.repository_owner, github.event.repository.name) }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+    steps:
+      - name: Find changes
+        id: changes
+        uses: anttiharju/find-changes-action@v1
+
+      - name: Detect changes
+        id: changed
+        uses: ./.github/actions/detect-changes
+        with:
+          changes: ${{ steps.changes.outputs.array }}
+
+      - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || steps.changed.outputs.release == 'true' || github.event_name == 'push') && ! endsWith(github.event.head_commit.author.name, '[bot]')
+        id: semantic
+        name: Require semantic version label
+        uses: ./.github/actions/semver-label
+        with:
+          require: ${{ steps.changed.outputs.rust == 'true' || steps.changed.outputs.release == 'true' }}
+
+      - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || github.event_name == 'push')
+        name: Cache
+        uses: ./.github/actions/cache
+
+      - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || github.event_name == 'push')
+        run: cargo build --all-features --target aarch64-apple-darwin
+      - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || github.event_name == 'push')
+        run: cargo build --all-features --target aarch64-unknown-linux-musl
+      - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || github.event_name == 'push' || steps.changed.outputs.action == 'true' )
+        run: cargo build --all-features --target x86_64-unknown-linux-musl
+
+      - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || github.event_name == 'push')
+        run: cargo test --all-features
+
+      - if: always() && !cancelled() && (steps.changed.outputs.rs == 'true' || github.event_name == 'push')
+        run: cargo fmt --check
+
+      - if: always() && !cancelled() && (steps.changed.outputs.rs == 'true' || github.event_name == 'push')
+        run: cargo clippy -- --deny warnings
+
+      - if: always() && !cancelled()
+        name: relcheck
+        run: |
+          relcheck all --verbose --color=always
+
+      - if: always() && !cancelled()
+        name: action-validator
+        run: |
+          git ls-files -z ".github/*/*.yml" "*/action.yml" | xargs --null action-validator --verbose
+
+      - if: always() && !cancelled() && (steps.changed.outputs.actionlint == 'true' || github.event_name == 'push')
+        name: actionlint
+        run: |
+          actionlint -color
+
+      - if: always() && !cancelled()
+        name: EditorConfig-Checker
+        run: |
+          git ls-files -z | xargs --null editorconfig-checker
+
+      - if: always() && !cancelled()
+        name: Keep .yml
+        run: |
+          YAML_FILES=$(git ls-files -z '*.yaml')
+          if [ -n "$YAML_FILES" ]; then
+            echo "Found the following .yaml files. Please use .yml extension instead."
+            echo "$YAML_FILES" | tr '\0' '\n'
+            exit 1
+          fi
+          echo "No .yaml files found. Good job!"
+
+      - if: always() && !cancelled() && (steps.changed.outputs.mkdocs == 'true' || github.event_name == 'push')
+        name: mkdocs
+        run: mkdocs build --strict
+
+      - if: always() && !cancelled() && (steps.changed.outputs.prettier == 'true' || github.event_name == 'push')
+        name: prettier
+        run: |
+          prettier "{*.yml,*.md}" --check
+
+      - if: always() && !cancelled() && (steps.changed.outputs.brew == 'true' || github.event_name == 'push')
+        name: Rubocop formula
+        uses: ./.github/actions/rubocop-formula
+
+      - if: always() && !cancelled() && (steps.changed.outputs.shellcheck == 'true' || github.event_name == 'push')
+        name: shellcheck
+        run: |
+          git ls-files -z '*.sh' | xargs --null shellcheck --color=always
+
+      - if: steps.semantic.outputs.version != '' && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && !endsWith(github.event.head_commit.author.name, '[bot]')
+        name: Create release commit
+        uses: ./.github/actions/commit-release
+        with:
+          version: ${{ steps.semantic.outputs.version }}
+          ANTTIHARJU_BOT_ID: ${{ secrets.ANTTIHARJU_BOT_ID }}
+          ANTTIHARJU_BOT_PRIVATE_KEY: ${{ secrets.ANTTIHARJU_BOT_PRIVATE_KEY }}
+
+      - if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && endsWith(github.event.head_commit.author.name, '[bot]')
+        id: parse
+        name: Parse release commit
+        env:
+          expected_bot: ${{ github.event.head_commit.author.name }}
+        run: |
+          commit_author="$(git log -1 --pretty=format:'%an')"
+          commit_committer="$(git log -1 --pretty=format:'%cn')"
+
+          if [[ "$commit_author" == "$expected_bot" && "$commit_committer" == "$expected_bot" ]]; then
+            commit_message="$(git log -1 --pretty=format:'%s')"
+            version="${commit_message%% *}"
+            if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "version=$version"
+              echo "version=$version" >> "$GITHUB_OUTPUT"
+            else
+              echo "Commit message does not match semver format: $commit_message"
+            fi
+          else
+            echo "Author or committer does not match expected bot: $expected_bot"
+            echo "Author: $commit_author, Committer: $commit_committer"
+          fi
+    outputs:
+      version: ${{ steps.semantic.outputs.version || steps.parse.outputs.version }}
+      documentation_changed: ${{ steps.changed.outputs.mkdocs }}

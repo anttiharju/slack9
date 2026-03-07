@@ -1,0 +1,19 @@
+permissions:
+  contents: none
+  pull-requests: none
+on:
+  push:
+    branches:
+      - wildcard
+    paths:
+      - ".github/workflows/*.yml"
+      - "**/action.yml"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/wildcard-action-validator.yml"
+jobs:
+  wildcard:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          true
