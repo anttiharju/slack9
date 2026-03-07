@@ -246,9 +246,9 @@ impl App {
             let command_buf_snapshot = self.command_buf.clone();
             let all_channels = &self.all_channels;
             let user_names = &self.user_names;
-            let poll_label = self.config.poll_interval.clone();
+            let poll_label = self.config.poll_interval_label();
             let workspace_label = self.team_name.clone();
-            let time_window_label = self.config.time_window.clone();
+            let time_window_label = self.config.time_window_label();
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();

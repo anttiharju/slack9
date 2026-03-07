@@ -60,20 +60,34 @@ pub fn render(
 
     // Poll interval label on second line
     if let Some(label) = poll_label {
-        let label_line = Line::from(vec![
-            Span::styled("Poll ", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
-            Span::styled(label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        ]);
+        let mut spans = vec![Span::styled(
+            "Poll ",
+            Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
+        )];
+        if let Some(value) = label.strip_suffix(" (default)") {
+            spans.push(Span::styled(value, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
+            spans.push(Span::styled(" (default)", Style::default().fg(Color::DarkGray)));
+        } else {
+            spans.push(Span::styled(label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
+        }
+        let label_line = Line::from(spans);
         let label_area = Rect::new(area.x, area.y + 2, area.width.saturating_sub(logo_width + 1), 1);
         frame.render_widget(Paragraph::new(label_line), label_area);
     }
 
     // Time window label on third line
     if let Some(tw) = time_window_label {
-        let label_line = Line::from(vec![
-            Span::styled("Past ", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
-            Span::styled(tw, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-        ]);
+        let mut spans = vec![Span::styled(
+            "Past ",
+            Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
+        )];
+        if let Some(value) = tw.strip_suffix(" (default)") {
+            spans.push(Span::styled(value, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
+            spans.push(Span::styled(" (default)", Style::default().fg(Color::DarkGray)));
+        } else {
+            spans.push(Span::styled(tw, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
+        }
+        let label_line = Line::from(spans);
         let label_area = Rect::new(area.x, area.y + 1, area.width.saturating_sub(logo_width + 1), 1);
         frame.render_widget(Paragraph::new(label_line), label_area);
     }

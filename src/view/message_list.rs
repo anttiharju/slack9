@@ -36,9 +36,9 @@ pub fn render(
         outer[0],
         Some(poll_interval),
         poll_elapsed,
-        Some(&config.poll_interval.to_string()),
+        Some(&config.poll_interval_label()),
         Some(team_name),
-        Some(&config.time_window),
+        Some(&config.time_window_label()),
     );
     let content_area = outer[1];
 
