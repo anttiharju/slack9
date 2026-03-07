@@ -48,6 +48,7 @@ impl Drop for App {
 }
 
 impl App {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         client: SlackClient,
         config: Config,
@@ -104,12 +105,7 @@ impl App {
 
         let default_source = MessageSource::Search(format!("<@{}>", self.user_id));
 
-        loop {
-            match self.track(default_source.clone()) {
-                TrackResult::Restart => continue,
-                TrackResult::Quit => break,
-            }
-        }
+        while let TrackResult::Restart = self.track(default_source.clone()) {}
     }
 
     fn find_channel(&self, name: &str) -> Option<(String, String)> {
@@ -342,9 +338,10 @@ impl App {
                         }
                         // Fix selection if it's now out of bounds
                         if let Some(sel) = list_state.selected()
-                            && sel >= messages.len() {
-                                list_state.select(if messages.is_empty() { None } else { Some(messages.len() - 1) });
-                            }
+                            && sel >= messages.len()
+                        {
+                            list_state.select(if messages.is_empty() { None } else { Some(messages.len() - 1) });
+                        }
                     }
                     for msg in new_msgs {
                         if !seen.contains_key(&msg.ts) {
@@ -483,13 +480,14 @@ fn fetch_messages(
                     };
                     if !hide.is_empty()
                         && let Ok(rr) = client.reactions_get(&channel_id, &m.ts)
-                            && let Some(msg) = &rr.message
-                                && has_hidden_reaction(&msg.reactions, hide) {
-                                    if seen_keys.contains(&m.ts) {
-                                        hide_ts.push(m.ts.clone());
-                                    }
-                                    continue;
-                                }
+                        && let Some(msg) = &rr.message
+                        && has_hidden_reaction(&msg.reactions, hide)
+                    {
+                        if seen_keys.contains(&m.ts) {
+                            hide_ts.push(m.ts.clone());
+                        }
+                        continue;
+                    }
                     if seen_keys.contains(&m.ts) {
                         continue;
                     }
