@@ -1,5 +1,3 @@
-use assert_cmd::cargo::cargo_bin_cmd;
-
 #[test]
 fn test_exitcode_usage() {
     use std::collections::HashMap;

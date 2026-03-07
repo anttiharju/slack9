@@ -45,7 +45,7 @@ fn main() {
         Ok(response) if response.ok => {
             let id = response.team_id.unwrap_or_else(|| {
                 eprintln!("Error: auth.test did not return a team_id");
-                std::process::exit(exitcode::auth_rejected());
+                std::process::exit(exitcode::missing_team_id());
             });
             let name = response.team.unwrap_or_else(|| id.clone());
             (id, name)

@@ -25,4 +25,5 @@ define_exitcodes! {
     invalid_poll_interval => InvalidPollInterval = 8,
     channel_resolve_error => ChannelResolveError = 9,
     user_load_error => UserLoadError = 10,
+    missing_team_id => MissingTeamId = 11,
 }
