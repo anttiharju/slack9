@@ -10,7 +10,7 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, Padding, Paragraph};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding, Paragraph};
 use std::collections::HashMap;
 use std::env;
 use std::io;
@@ -123,38 +123,77 @@ fn main() {
     let mut seen: HashMap<String, usize> = HashMap::new();
     let mut last_poll: Option<Instant> = None;
     let mut command_buf: Option<String> = None;
+    let mut list_state = ListState::default();
 
     loop {
         if event::poll(Duration::from_millis(100)).unwrap_or(false)
             && let Ok(Event::Key(key)) = event::read()
-                && key.kind == KeyEventKind::Press {
-                    if let Some(ref mut buf) = command_buf {
-                        match key.code {
-                            KeyCode::Enter => {
-                                let cmd = buf.trim().to_string();
-                                command_buf = None;
-                                if cmd == "q" {
-                                    break;
-                                }
-                            }
-                            KeyCode::Esc => {
-                                command_buf = None;
-                            }
-                            KeyCode::Backspace => {
-                                buf.pop();
-                                if buf.is_empty() {
-                                    command_buf = None;
-                                }
-                            }
-                            KeyCode::Char(c) => {
-                                buf.push(c);
-                            }
-                            _ => {}
+            && key.kind == KeyEventKind::Press
+        {
+            if let Some(ref mut buf) = command_buf {
+                match key.code {
+                    KeyCode::Enter => {
+                        let cmd = buf.trim().to_string();
+                        command_buf = None;
+                        if cmd == "q" {
+                            break;
                         }
-                    } else if key.code == KeyCode::Char(':') {
+                    }
+                    KeyCode::Esc => {
+                        command_buf = None;
+                    }
+                    KeyCode::Backspace => {
+                        buf.pop();
+                        if buf.is_empty() {
+                            command_buf = None;
+                        }
+                    }
+                    KeyCode::Char(c) => {
+                        buf.push(c);
+                    }
+                    _ => {}
+                }
+            } else {
+                match key.code {
+                    KeyCode::Char(':') => {
                         command_buf = Some(String::new());
                     }
+                    KeyCode::Up => {
+                        let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
+                        if visible_count > 0 {
+                            let i = match list_state.selected() {
+                                Some(i) => {
+                                    if i == 0 {
+                                        visible_count - 1
+                                    } else {
+                                        i - 1
+                                    }
+                                }
+                                None => visible_count - 1,
+                            };
+                            list_state.select(Some(i));
+                        }
+                    }
+                    KeyCode::Down => {
+                        let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
+                        if visible_count > 0 {
+                            let i = match list_state.selected() {
+                                Some(i) => {
+                                    if i >= visible_count - 1 {
+                                        0
+                                    } else {
+                                        i + 1
+                                    }
+                                }
+                                None => 0,
+                            };
+                            list_state.select(Some(i));
+                        }
+                    }
+                    _ => {}
                 }
+            }
+        }
 
         if last_poll.is_none_or(|t| t.elapsed() >= poll_interval) {
             last_poll = Some(Instant::now());
@@ -251,15 +290,18 @@ fn main() {
                     channel_list, config.poll_interval, config.time_window,
                 );
 
-                let list = List::new(items).block(
-                    Block::default()
-                        .title(title)
-                        .title_bottom(" :q to quit ")
-                        .borders(Borders::ALL)
-                        .padding(Padding::new(1, 1, 0, 0)),
-                );
+                let list = List::new(items)
+                    .block(
+                        Block::default()
+                            .title(title)
+                            .title_bottom(" :q to quit ")
+                            .borders(Borders::ALL)
+                            .padding(Padding::new(1, 1, 0, 0)),
+                    )
+                    .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+                    .highlight_symbol("> ");
 
-                frame.render_widget(list, list_area);
+                frame.render_stateful_widget(list, list_area, &mut list_state);
 
                 let status_line = if in_command_mode { Paragraph::new("") } else { Paragraph::new("") };
                 frame.render_widget(status_line, status_area);
