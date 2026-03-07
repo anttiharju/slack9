@@ -178,9 +178,7 @@ fn main() {
                         let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
                         if visible_count > 0 {
                             let current = list_state.selected().unwrap_or(0);
-                            let i = if repeat >= visible_count {
-                                0
-                            } else { current.saturating_sub(repeat) };
+                            let i = if repeat >= visible_count { 0 } else { current.saturating_sub(repeat) };
                             list_state.select(Some(i));
                         }
                     }
@@ -256,10 +254,6 @@ fn main() {
                         if let Some(&idx) = seen.get(&msg.ts) {
                             messages[idx].status = status;
                         } else {
-                            for reaction in &config.reactions.backlog {
-                                let _ = client.reactions_add(channel_id, &msg.ts, reaction);
-                            }
-
                             let user_id = msg.user.as_deref().unwrap_or("unknown");
                             let display_name = client.resolve_user(user_id);
                             let text = msg.text.as_deref().unwrap_or("").to_string();

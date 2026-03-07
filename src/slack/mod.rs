@@ -265,36 +265,6 @@ impl SlackClient {
         Ok(map)
     }
 
-    pub fn reactions_add(&self, channel: &str, timestamp: &str, name: &str) -> Result<(), String> {
-        let url = format!("{}/api/reactions.add", self.workspace_url);
-
-        let response = self
-            .client
-            .post(&url)
-            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .header(COOKIE, format!("d={}", self.xoxd))
-            .body(format!("token={}&channel={}&timestamp={}&name={}", self.xoxc, channel, timestamp, name))
-            .send()
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        #[derive(Deserialize)]
-        struct Resp {
-            ok: bool,
-            error: Option<String>,
-        }
-
-        let resp: Resp = response.json().map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        if !resp.ok {
-            let err = resp.error.unwrap_or_else(|| "unknown error".to_string());
-            if err != "already_reacted" {
-                return Err(format!("reactions.add failed: {}", err));
-            }
-        }
-
-        Ok(())
-    }
-
     pub fn conversations_history(&self, channel: &str, time_window: Duration) -> Result<ConversationsHistoryResponse, String> {
         let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - time_window.as_secs_f64();
 
