@@ -1,6 +1,6 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use std::time::Duration;
@@ -41,8 +41,10 @@ pub fn render(frame: &mut Frame, area: Rect, poll_interval: Option<Duration>, po
 
     // Poll interval label in top-left
     if let Some(label) = poll_label {
-        let text = format!("poll {}", label);
-        let label_line = Line::from(Span::styled(text, Style::default().fg(Color::DarkGray)));
+        let label_line = Line::from(vec![
+            Span::styled("poll ", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
+            Span::styled(label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        ]);
         let label_area = Rect::new(area.x, area.y, area.width.saturating_sub(logo_width + 1), 1);
         frame.render_widget(Paragraph::new(label_line), label_area);
     }
