@@ -1,4 +1,4 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
@@ -7,21 +7,19 @@ use std::time::Duration;
 const DEFAULT_PAST: &str = "24h";
 const DEFAULT_POLL: &str = "10s";
 
-#[derive(Debug, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Deserialize, Serialize, Default)]
 pub struct Config {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "HeaderConfig::is_default")]
     pub header: HeaderConfig,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct HeaderConfig {
-    #[serde(default = "default_past")]
+    #[serde(default = "default_past", skip_serializing_if = "is_default_past")]
     pub past: String,
-    #[serde(default = "default_poll")]
+    #[serde(default = "default_poll", skip_serializing_if = "is_default_poll")]
     pub poll: String,
 }
-
 
 impl Default for HeaderConfig {
     fn default() -> Self {
@@ -40,7 +38,19 @@ fn default_poll() -> String {
     DEFAULT_POLL.to_string()
 }
 
+fn is_default_past(v: &str) -> bool {
+    v == DEFAULT_PAST
+}
+
+fn is_default_poll(v: &str) -> bool {
+    v == DEFAULT_POLL
+}
+
 impl HeaderConfig {
+    fn is_default(&self) -> bool {
+        self.past == DEFAULT_PAST && self.poll == DEFAULT_POLL
+    }
+
     pub fn past_duration(&self) -> Result<Duration, String> {
         parse_duration(&self.past)
     }
@@ -101,6 +111,10 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
     }
 }
 
+pub fn validate_duration(s: &str) -> Result<Duration, String> {
+    parse_duration(s)
+}
+
 pub fn load() -> Config {
     let path = match config_path() {
         Ok(p) => p,
@@ -116,6 +130,16 @@ pub fn load() -> Config {
         eprintln!("Warning: failed to parse {}: {}", path.display(), e);
         Config::default()
     })
+}
+
+pub fn save(config: &Config) -> Result<(), String> {
+    let path = config_path()?;
+    let contents = toml::to_string_pretty(config).map_err(|e| format!("failed to serialize config: {}", e))?;
+    if contents.trim().is_empty() {
+        let _ = fs::remove_file(&path);
+        return Ok(());
+    }
+    fs::write(&path, contents).map_err(|e| format!("failed to write {}: {}", path.display(), e))
 }
 
 fn config_path() -> Result<PathBuf, String> {

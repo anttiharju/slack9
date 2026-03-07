@@ -1,4 +1,4 @@
-use crate::config::Config;
+use crate::config::{self, Config};
 use crate::input;
 use crate::model::TrackedMessage;
 use crate::slack::SlackClient;
@@ -141,6 +141,36 @@ impl App {
             .cloned()
     }
 
+    /// Handle `:past <val>` and `:poll <val>` commands.
+    /// Returns true if the command was recognized and handled.
+    fn handle_config_command(&mut self, cmd: &str) -> bool {
+        if let Some(val) = cmd.strip_prefix("past ") {
+            let val = val.trim();
+            match config::validate_duration(val) {
+                Ok(d) => {
+                    self.config.header.past = val.to_string();
+                    self.past = d;
+                    let _ = config::save(&self.config);
+                }
+                Err(e) => eprintln!("Invalid past duration: {}", e),
+            }
+            true
+        } else if let Some(val) = cmd.strip_prefix("poll ") {
+            let val = val.trim();
+            match config::validate_duration(val) {
+                Ok(d) => {
+                    self.config.header.poll = val.to_string();
+                    self.poll = d;
+                    let _ = config::save(&self.config);
+                }
+                Err(e) => eprintln!("Invalid poll duration: {}", e),
+            }
+            true
+        } else {
+            false
+        }
+    }
+
     fn select_channel(&mut self) -> SelectResult {
         let mut list_state = ListState::default();
         if !self.all_channels.is_empty() {
@@ -162,6 +192,7 @@ impl App {
                             if cmd == "q" || cmd == "q!" {
                                 return SelectResult::Quit;
                             }
+                            self.handle_config_command(&cmd);
                             let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
                             if let Some(name) = channel_arg
                                 && let Some(ch) = self.find_channel(name)
@@ -295,6 +326,7 @@ impl App {
                             if cmd == "c" || cmd == "channel" {
                                 return TrackResult::BackToSelect;
                             }
+                            self.handle_config_command(&cmd);
                             let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
                             if let Some(name) = channel_arg
                                 && let Some(ch) = self.find_channel(name)
@@ -513,6 +545,7 @@ impl App {
                             if cmd == "c" || cmd == "channel" {
                                 return TrackResult::BackToSelect;
                             }
+                            self.handle_config_command(&cmd);
                             if let Some(rest) = cmd.strip_prefix("search ") {
                                 let handles: Vec<String> = rest
                                     .split_whitespace()
