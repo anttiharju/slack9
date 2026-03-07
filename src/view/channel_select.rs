@@ -72,12 +72,14 @@ pub fn render(
         String::new()
     };
 
+    let list_border_color = if has_overlay { Color::Blue } else { Color::Cyan };
     let list = List::new(items)
         .block(
             Block::default()
                 .title(format!(" slack9s \u{2014} select channel{} ", filter_indicator))
                 .title_bottom(" enter: select | /: filter | :q to quit ")
                 .borders(Borders::ALL)
+                .border_style(Style::default().fg(list_border_color))
                 .padding(Padding::new(1, 1, 0, 0)),
         )
         .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))

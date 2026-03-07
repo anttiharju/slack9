@@ -15,6 +15,7 @@ pub fn render(frame: &mut Frame, area: Rect, buf: &str, all_channels: &[(String,
         Block::default()
             .title(" command ")
             .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
             .padding(Padding::new(1, 1, 0, 0)),
     );
     frame.render_widget(paragraph, area);

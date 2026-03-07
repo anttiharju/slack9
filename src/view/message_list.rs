@@ -104,12 +104,14 @@ pub fn render(
         channel_list, config.poll_interval, config.time_window, filter_indicator,
     );
 
+    let list_border_color = if has_overlay { Color::Blue } else { Color::Cyan };
     let list = List::new(items)
         .block(
             Block::default()
                 .title(title)
                 .title_bottom(" :q to quit | /: filter ")
                 .borders(Borders::ALL)
+                .border_style(Style::default().fg(list_border_color))
                 .padding(Padding::new(1, 1, 0, 0)),
         )
         .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
