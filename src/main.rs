@@ -124,6 +124,7 @@ fn main() {
     let mut last_poll: Option<Instant> = None;
     let mut command_buf: Option<String> = None;
     let mut list_state = ListState::default();
+    let mut pending_g: Option<char> = None;
 
     loop {
         if event::poll(Duration::from_millis(100)).unwrap_or(false)
@@ -156,9 +157,11 @@ fn main() {
             } else {
                 match key.code {
                     KeyCode::Char(':') => {
+                        pending_g = None;
                         command_buf = Some(String::new());
                     }
-                    KeyCode::Up => {
+                    KeyCode::Up | KeyCode::Char('k') => {
+                        pending_g = None;
                         let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
                         if visible_count > 0 {
                             let i = match list_state.selected() {
@@ -174,7 +177,8 @@ fn main() {
                             list_state.select(Some(i));
                         }
                     }
-                    KeyCode::Down => {
+                    KeyCode::Down | KeyCode::Char('j') => {
+                        pending_g = None;
                         let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
                         if visible_count > 0 {
                             let i = match list_state.selected() {
@@ -190,7 +194,31 @@ fn main() {
                             list_state.select(Some(i));
                         }
                     }
-                    _ => {}
+                    KeyCode::Char('g') => {
+                        if pending_g == Some('g') {
+                            let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
+                            if visible_count > 0 {
+                                list_state.select(Some(0));
+                            }
+                            pending_g = None;
+                        } else {
+                            pending_g = Some('g');
+                        }
+                    }
+                    KeyCode::Char('G') => {
+                        if pending_g == Some('G') {
+                            let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
+                            if visible_count > 0 {
+                                list_state.select(Some(visible_count - 1));
+                            }
+                            pending_g = None;
+                        } else {
+                            pending_g = Some('G');
+                        }
+                    }
+                    _ => {
+                        pending_g = None;
+                    }
                 }
             }
         }
