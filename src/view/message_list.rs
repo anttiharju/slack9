@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding, Paragraph};
 use std::time::Duration;
 
-use super::{command_bar, filter_bar};
+use super::{command_bar, filter_bar, header};
 
 pub fn render(
     frame: &mut Frame,
@@ -27,16 +27,24 @@ pub fn render(
     let in_filter_mode = filter_editing;
     let has_overlay = in_command_mode || in_filter_mode;
 
+    let outer = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(header::LOGO_HEIGHT + 1), Constraint::Min(1)])
+        .split(area);
+
+    header::render(frame, outer[0]);
+    let content_area = outer[1];
+
     let chunks = if has_overlay {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Min(1), Constraint::Length(1)])
-            .split(area)
+            .split(content_area)
     } else {
         Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(1), Constraint::Length(1)])
-            .split(area)
+            .split(content_area)
     };
 
     let (overlay_area, list_area, status_area) = if has_overlay {

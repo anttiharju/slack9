@@ -69,6 +69,19 @@ impl App {
     }
 
     pub fn run(mut self) {
+        // Show splash screen for 1 second
+        let splash_start = Instant::now();
+        while splash_start.elapsed() < Duration::from_secs(1) {
+            self.terminal
+                .draw(|frame| {
+                    view::splash::render(frame);
+                })
+                .expect("failed to draw splash");
+            if event::poll(Duration::from_millis(50)).unwrap_or(false) {
+                let _ = event::read();
+            }
+        }
+
         loop {
             let selected = match self.select_channel() {
                 SelectResult::Channel(id, name) => (id, name),

@@ -1,0 +1,16 @@
+   SSSSSSSSSSSSSSS lllllll                                      kkkkkkkk                999999999
+ SS:::::::::::::::Sl:::::l                                      k::::::k              99:::::::::99
+S:::::SSSSSS::::::Sl:::::l                                      k::::::k            99:::::::::::::99
+S:::::S     SSSSSSSl:::::l                                      k::::::k           9::::::99999::::::9
+S:::::S             l::::l   aaaaaaaaaaaaa      cccccccccccccccc k:::::k    kkkkkkk9:::::9     9:::::9    ssssssssss
+S:::::S             l::::l   a::::::::::::a   cc:::::::::::::::c k:::::k   k:::::k 9:::::9     9:::::9  ss::::::::::s
+ S::::SSSS          l::::l   aaaaaaaaa:::::a c:::::::::::::::::c k:::::k  k:::::k   9:::::99999::::::9ss:::::::::::::s
+  SS::::::SSSSS     l::::l            a::::ac:::::::cccccc:::::c k:::::k k:::::k     99::::::::::::::9s::::::ssss:::::s
+    SSS::::::::SS   l::::l     aaaaaaa:::::ac::::::c     ccccccc k::::::k:::::k        99999::::::::9  s:::::s  ssssss
+       SSSSSS::::S  l::::l   aa::::::::::::ac:::::c              k:::::::::::k              9::::::9     s::::::s
+            S:::::S l::::l  a::::aaaa::::::ac:::::c              k:::::::::::k             9::::::9         s::::::s
+            S:::::S l::::l a::::a    a:::::ac::::::c     ccccccc k::::::k:::::k           9::::::9    ssssss   s:::::s
+SSSSSSS     S:::::Sl::::::la::::a    a:::::ac:::::::cccccc:::::ck::::::k k:::::k         9::::::9     s:::::ssss::::::s
+S::::::SSSSSS:::::Sl::::::la:::::aaaa::::::a c:::::::::::::::::ck::::::k  k:::::k       9::::::9      s::::::::::::::s
+S:::::::::::::::SS l::::::l a::::::::::aa:::a cc:::::::::::::::ck::::::k   k:::::k     9::::::9        s:::::::::::ss
+ SSSSSSSSSSSSSSS   llllllll  aaaaaaaaaa  aaaa   cccccccccccccccckkkkkkkk    kkkkkkk   99999999          sssssssssss
