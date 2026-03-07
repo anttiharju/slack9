@@ -10,6 +10,21 @@ const SMALL_LOGO: &str = include_str!("logo_small.txt");
 /// Logo height + 1 row for the poll indicator
 pub const LOGO_HEIGHT: u16 = 6;
 
+const BLOCKS: &[char] = &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+// Phase boundaries (fractions of the cycle)
+const WAVE_END: f64 = 0.50; // 50% wave
+const EXPLOSION_END: f64 = 0.54; // 4% all-filled
+const DRAIN_END: f64 = 0.85; // 31% drain
+// hold: 15% all-▁
+
+/// Wave tail: for a cell at integer distance `d` behind the peak returns block level 0–7.
+///
+/// Each step drops by one level: █ ▇ ▆ ▅ ▄ ▃ ▂ ▁
+fn wave_level_at(d: usize) -> usize {
+    7_usize.saturating_sub(d)
+}
+
 pub fn render(frame: &mut Frame, area: Rect, poll_interval: Option<Duration>, poll_elapsed: Option<Duration>) {
     let logo_width = SMALL_LOGO.lines().map(|l| l.len()).max().unwrap_or(0) as u16;
     let lines: Vec<Line> = SMALL_LOGO
@@ -28,35 +43,67 @@ pub fn render(frame: &mut Frame, area: Rect, poll_interval: Option<Duration>, po
     if let Some(interval) = poll_interval {
         let bar_width = logo_width as usize;
         let bar_y = area.y + 5;
-        if bar_y < area.bottom() {
-            let bar_area = Rect::new(x, bar_y, logo_width, 1);
-            let spans = match poll_elapsed {
-                Some(elapsed) => {
-                    let elapsed_secs = elapsed.as_secs_f64();
-                    let total_secs = interval.as_secs_f64().max(1.0);
-                    if elapsed_secs < 1.0 {
-                        // Just polled — flash all green
-                        vec![Span::styled("\u{2588}".repeat(bar_width), Style::default().fg(Color::Green))]
-                    } else {
-                        let ratio = (elapsed_secs / total_secs).min(1.0);
-                        let consumed = (ratio * bar_width as f64).round() as usize;
-                        let remaining = bar_width.saturating_sub(consumed);
-                        let mut s = Vec::new();
-                        if remaining > 0 {
-                            s.push(Span::styled("\u{2588}".repeat(remaining), Style::default().fg(Color::DarkGray)));
-                        }
-                        if consumed > 0 {
-                            s.push(Span::styled("\u{2591}".repeat(consumed), Style::default().fg(Color::DarkGray)));
-                        }
-                        s
-                    }
-                }
-                None => {
-                    vec![Span::styled("\u{2591}".repeat(bar_width), Style::default().fg(Color::DarkGray))]
-                }
-            };
-            let status_line = Paragraph::new(Line::from(spans));
-            frame.render_widget(status_line, bar_area);
+        if bar_y >= area.bottom() {
+            return;
         }
+        let bar_area = Rect::new(x, bar_y, logo_width, 1);
+        let num_cells = bar_width.div_ceil(2); // each cell = block + space
+
+        let cycle_secs = interval.as_secs_f64().max(1.0);
+        let elapsed_secs = poll_elapsed.map_or(0.0, |e| e.as_secs_f64());
+        let progress = (elapsed_secs / cycle_secs).min(1.0);
+
+        let mut bar = String::with_capacity(bar_width * 4);
+
+        if progress < WAVE_END {
+            // Wave phase: peak sweeps left → right with a trailing gradient
+            let wave_progress = progress / WAVE_END;
+            let tail_len = 7.0_f64;
+            // Peak travels from off-screen left to the last cell
+            let peak = -tail_len + wave_progress * ((num_cells - 1) as f64 + tail_len);
+
+            for i in 0..num_cells {
+                let d = peak - i as f64;
+                let level = if d < 0.0 {
+                    0 // ahead of the peak
+                } else {
+                    wave_level_at(d.round() as usize)
+                };
+                bar.push(BLOCKS[level]);
+                if i + 1 < num_cells {
+                    bar.push(' ');
+                }
+            }
+        } else if progress < EXPLOSION_END {
+            // Explosion: all cells snap to full
+            for i in 0..num_cells {
+                bar.push(BLOCKS[7]);
+                if i + 1 < num_cells {
+                    bar.push(' ');
+                }
+            }
+        } else if progress < DRAIN_END {
+            // Drain: uniform descent from █ to ▁
+            let drain_progress = (progress - EXPLOSION_END) / (DRAIN_END - EXPLOSION_END);
+            let level = ((1.0 - drain_progress) * 7.0).round() as usize;
+            for i in 0..num_cells {
+                bar.push(BLOCKS[level]);
+                if i + 1 < num_cells {
+                    bar.push(' ');
+                }
+            }
+        } else {
+            // Hold: all ▁ until next poll
+            for i in 0..num_cells {
+                bar.push(BLOCKS[0]);
+                if i + 1 < num_cells {
+                    bar.push(' ');
+                }
+            }
+        }
+
+        let spans = vec![Span::styled(bar, Style::default().fg(Color::DarkGray))];
+        let status_line = Paragraph::new(Line::from(spans));
+        frame.render_widget(status_line, bar_area);
     }
 }
