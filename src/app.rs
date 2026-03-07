@@ -98,6 +98,20 @@ impl App {
         crossterm::execute!(self.terminal.backend_mut(), LeaveAlternateScreen).expect("failed to leave alternate screen");
     }
 
+    fn resolve_mentions(&self, text: &str) -> String {
+        let mut result = text.to_string();
+        while let Some(start) = result.find("<@") {
+            if let Some(end) = result[start..].find('>') {
+                let user_id = &result[start + 2..start + end];
+                let name = self.client.resolve_user(user_id);
+                result.replace_range(start..start + end + 1, &format!("@{}", name));
+            } else {
+                break;
+            }
+        }
+        result
+    }
+
     fn find_channel(&self, name: &str) -> Option<(String, String)> {
         let name = name.trim().trim_start_matches('#');
         self.all_channels
@@ -560,7 +574,8 @@ impl App {
                             } else {
                                 let user_id = msg.user.as_deref().unwrap_or("unknown");
                                 let display_name = self.client.resolve_user(user_id);
-                                let text = msg.text.as_deref().unwrap_or("").to_string();
+                                let raw_text = msg.text.as_deref().unwrap_or("").to_string();
+                                let text = self.resolve_mentions(&raw_text);
 
                                 seen.insert(msg.ts.clone(), messages.len());
                                 messages.push(TrackedMessage {
