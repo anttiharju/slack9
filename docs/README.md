@@ -1,6 +1,6 @@
-# slackemon
+# slack9s
 
-`slackemon` is a template for my Rust projects to make it easier to start new ones.
+`slack9s` is a template for my Rust projects to make it easier to start new ones.
 
 ## How to acquire xoxd and xoxc tokens
 

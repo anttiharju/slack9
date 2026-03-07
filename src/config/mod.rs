@@ -32,7 +32,7 @@ impl Config {
 
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Config (~/slackemon.toml):")?;
+        writeln!(f, "Config (~/slack9s.toml):")?;
         writeln!(f, "  channels: {}", self.channels.join(", "))?;
         writeln!(f, "  time_window: {}", self.time_window)?;
         writeln!(f, "  poll_interval: {}", self.poll_interval)?;
@@ -79,5 +79,5 @@ pub fn load() -> Result<Config, String> {
 
 fn config_path() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").map_err(|_| "Could not determine home directory".to_string())?;
-    Ok(PathBuf::from(home).join("slackemon.toml"))
+    Ok(PathBuf::from(home).join("slack9s.toml"))
 }

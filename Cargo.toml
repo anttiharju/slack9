@@ -1,9 +1,9 @@
 [package]
 license = "MIT"
-description = "slackemon is a template for my Rust projects to make it easier to start new ones."
-repository = "https://github.com/anttiharju/slackemon"
+description = "slack9s is a template for my Rust projects to make it easier to start new ones."
+repository = "https://github.com/anttiharju/slack9s"
 readme = "docs/README.md"
-name = "slackemon"
+name = "slack9s"
 version = "0.0.0"
 edition = "2024"
 include = ["src/**", "tests/**"]

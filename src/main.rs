@@ -60,18 +60,18 @@ fn main() {
         std::process::exit(exitcode::invalid_poll_interval());
     });
 
-    let xoxd = env::var("SLACKEMON_XOXD").unwrap_or_else(|_| {
-        eprintln!("Error: SLACKEMON_XOXD environment variable not set");
+    let xoxd = env::var("slack9s_XOXD").unwrap_or_else(|_| {
+        eprintln!("Error: slack9s_XOXD environment variable not set");
         std::process::exit(exitcode::missing_xoxd());
     });
 
-    let xoxc = env::var("SLACKEMON_XOXC").unwrap_or_else(|_| {
-        eprintln!("Error: SLACKEMON_XOXC environment variable not set");
+    let xoxc = env::var("slack9s_XOXC").unwrap_or_else(|_| {
+        eprintln!("Error: slack9s_XOXC environment variable not set");
         std::process::exit(exitcode::missing_xoxc());
     });
 
-    let workspace_url = env::var("SLACKEMON_WORKSPACE_URL").unwrap_or_else(|_| {
-        eprintln!("Error: SLACKEMON_WORKSPACE_URL environment variable not set");
+    let workspace_url = env::var("slack9s_WORKSPACE_URL").unwrap_or_else(|_| {
+        eprintln!("Error: slack9s_WORKSPACE_URL environment variable not set");
         std::process::exit(exitcode::missing_workspace_url());
     });
 
@@ -125,40 +125,43 @@ fn main() {
     loop {
         if event::poll(Duration::from_millis(100)).unwrap_or(false)
             && let Ok(Event::Key(key)) = event::read()
-                && key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
-                    break;
-                }
+            && key.kind == KeyEventKind::Press
+            && key.code == KeyCode::Char('q')
+        {
+            break;
+        }
 
         if last_poll.is_none_or(|t| t.elapsed() >= poll_interval) {
             last_poll = Some(Instant::now());
 
             for (channel_id, channel_name) in &channels {
                 if let Ok(resp) = client.conversations_history(channel_id, time_window)
-                    && let Some(msgs) = resp.messages {
-                        for msg in msgs.iter().rev() {
-                            let status = determine_status(msg, &config.reactions);
+                    && let Some(msgs) = resp.messages
+                {
+                    for msg in msgs.iter().rev() {
+                        let status = determine_status(msg, &config.reactions);
 
-                            if let Some(&idx) = seen.get(&msg.ts) {
-                                messages[idx].status = status;
-                            } else {
-                                for reaction in &config.reactions.backlog {
-                                    let _ = client.reactions_add(channel_id, &msg.ts, reaction);
-                                }
-
-                                let user_id = msg.user.as_deref().unwrap_or("unknown");
-                                let display_name = client.resolve_user(user_id);
-                                let text = msg.text.as_deref().unwrap_or("").to_string();
-
-                                seen.insert(msg.ts.clone(), messages.len());
-                                messages.push(TrackedMessage {
-                                    channel_name: channel_name.clone(),
-                                    display_name,
-                                    text,
-                                    status,
-                                });
+                        if let Some(&idx) = seen.get(&msg.ts) {
+                            messages[idx].status = status;
+                        } else {
+                            for reaction in &config.reactions.backlog {
+                                let _ = client.reactions_add(channel_id, &msg.ts, reaction);
                             }
+
+                            let user_id = msg.user.as_deref().unwrap_or("unknown");
+                            let display_name = client.resolve_user(user_id);
+                            let text = msg.text.as_deref().unwrap_or("").to_string();
+
+                            seen.insert(msg.ts.clone(), messages.len());
+                            messages.push(TrackedMessage {
+                                channel_name: channel_name.clone(),
+                                display_name,
+                                text,
+                                status,
+                            });
                         }
                     }
+                }
             }
         }
 
@@ -186,7 +189,7 @@ fn main() {
                 let channel_list: String = channels.iter().map(|(_, name)| format!("#{}", name)).collect::<Vec<_>>().join(", ");
 
                 let title = format!(
-                    " slackemon \u{2014} {} (every {}, {} window) ",
+                    " slack9s \u{2014} {} (every {}, {} window) ",
                     channel_list, config.poll_interval, config.time_window,
                 );
 
