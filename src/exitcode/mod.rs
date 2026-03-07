@@ -26,4 +26,5 @@ define_exitcodes! {
     channel_resolve_error => ChannelResolveError = 9,
     user_load_error => UserLoadError = 10,
     missing_team_id => MissingTeamId = 11,
+    missing_user_id => MissingUserId = 12,
 }

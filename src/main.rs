@@ -50,7 +50,7 @@ fn main() {
             let name = response.team.unwrap_or_else(|| id.clone());
             let uid = response.user_id.unwrap_or_else(|| {
                 eprintln!("Error: auth.test did not return a user_id");
-                std::process::exit(exitcode::missing_team_id());
+                std::process::exit(exitcode::missing_user_id());
             });
             (id, name, uid)
         }
