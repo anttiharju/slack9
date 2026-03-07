@@ -25,7 +25,9 @@ enum Status {
 }
 
 struct TrackedMessage {
+    channel_id: String,
     channel_name: String,
+    ts: String,
     display_name: String,
     text: String,
     status: Status,
@@ -75,6 +77,7 @@ fn main() {
         eprintln!("Error: SLACK9S_WORKSPACE_URL environment variable not set");
         std::process::exit(exitcode::missing_workspace_url());
     });
+    let workspace_url_for_links = workspace_url.trim_end_matches('/').to_string();
 
     let mut client = slack::SlackClient::new(workspace_url, xoxd, xoxc);
 
@@ -125,6 +128,7 @@ fn main() {
     let mut command_buf: Option<String> = None;
     let mut list_state = ListState::default();
     let mut pending_g: Option<char> = None;
+    let mut count_buf: u32 = 0;
 
     loop {
         if event::poll(Duration::from_millis(100)).unwrap_or(false)
@@ -140,7 +144,7 @@ fn main() {
                             break;
                         }
                     }
-                    KeyCode::Esc => {
+                    KeyCode::Esc | KeyCode::Char('\x03') => {
                         command_buf = None;
                     }
                     KeyCode::Backspace => {
@@ -156,45 +160,47 @@ fn main() {
                 }
             } else {
                 match key.code {
+                    KeyCode::Char(c @ '0'..='9') => {
+                        // Don't treat leading 0 as a count (no 0-motion in vim either)
+                        if count_buf > 0 || c != '0' {
+                            count_buf = count_buf.saturating_mul(10).saturating_add(c as u32 - '0' as u32);
+                        }
+                    }
                     KeyCode::Char(':') => {
                         pending_g = None;
+                        count_buf = 0;
                         command_buf = Some(String::new());
                     }
                     KeyCode::Up | KeyCode::Char('k') => {
                         pending_g = None;
+                        let repeat = if count_buf == 0 { 1 } else { count_buf as usize };
+                        count_buf = 0;
                         let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
                         if visible_count > 0 {
-                            let i = match list_state.selected() {
-                                Some(i) => {
-                                    if i == 0 {
-                                        visible_count - 1
-                                    } else {
-                                        i - 1
-                                    }
-                                }
-                                None => visible_count - 1,
-                            };
+                            let current = list_state.selected().unwrap_or(0);
+                            let i = if repeat >= visible_count {
+                                0
+                            } else { current.saturating_sub(repeat) };
                             list_state.select(Some(i));
                         }
                     }
                     KeyCode::Down | KeyCode::Char('j') => {
                         pending_g = None;
+                        let repeat = if count_buf == 0 { 1 } else { count_buf as usize };
+                        count_buf = 0;
                         let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
                         if visible_count > 0 {
-                            let i = match list_state.selected() {
-                                Some(i) => {
-                                    if i >= visible_count - 1 {
-                                        0
-                                    } else {
-                                        i + 1
-                                    }
-                                }
-                                None => 0,
+                            let current = list_state.selected().unwrap_or(0);
+                            let i = if current + repeat >= visible_count {
+                                visible_count - 1
+                            } else {
+                                current + repeat
                             };
                             list_state.select(Some(i));
                         }
                     }
                     KeyCode::Char('g') => {
+                        count_buf = 0;
                         if pending_g == Some('g') {
                             let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
                             if visible_count > 0 {
@@ -206,6 +212,7 @@ fn main() {
                         }
                     }
                     KeyCode::Char('G') => {
+                        count_buf = 0;
                         if pending_g == Some('G') {
                             let visible_count = messages.iter().filter(|m| m.status != Status::Completed).count();
                             if visible_count > 0 {
@@ -216,8 +223,21 @@ fn main() {
                             pending_g = Some('G');
                         }
                     }
+                    KeyCode::Enter => {
+                        pending_g = None;
+                        count_buf = 0;
+                        if let Some(selected) = list_state.selected() {
+                            let visible: Vec<&TrackedMessage> = messages.iter().filter(|m| m.status != Status::Completed).collect();
+                            if let Some(msg) = visible.get(selected) {
+                                let ts_for_url = msg.ts.replace('.', "");
+                                let url = format!("{}/archives/{}/p{}", workspace_url_for_links, msg.channel_id, ts_for_url);
+                                let _ = std::process::Command::new("open").arg(&url).spawn();
+                            }
+                        }
+                    }
                     _ => {
                         pending_g = None;
+                        count_buf = 0;
                     }
                 }
             }
@@ -246,7 +266,9 @@ fn main() {
 
                             seen.insert(msg.ts.clone(), messages.len());
                             messages.push(TrackedMessage {
+                                channel_id: channel_id.clone(),
                                 channel_name: channel_name.clone(),
+                                ts: msg.ts.clone(),
                                 display_name,
                                 text,
                                 status,
