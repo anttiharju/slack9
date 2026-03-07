@@ -1,18 +1,21 @@
 pub fn tab_complete_channel(buf: &mut String, channels: &[(String, String)], user_names: &[String]) {
-    let (prefix, partial, candidates): (&str, &str, Vec<&str>) = if let Some(rest) = buf.strip_prefix("channel ") {
+    let (prefix, partial, candidates): (String, &str, Vec<&str>) = if let Some(rest) = buf.strip_prefix("channel ") {
         (
-            "channel ",
+            "channel ".to_string(),
             rest.trim_start_matches('#'),
             channels.iter().map(|(_, name)| name.as_str()).collect(),
         )
     } else if let Some(rest) = buf.strip_prefix("c ") {
         (
-            "c ",
+            "c ".to_string(),
             rest.trim_start_matches('#'),
             channels.iter().map(|(_, name)| name.as_str()).collect(),
         )
-    } else if let Some(rest) = buf.strip_prefix("ping ") {
-        ("ping ", rest.trim_start_matches('@'), user_names.iter().map(|s| s.as_str()).collect())
+    } else if let Some(rest) = buf.strip_prefix("search ") {
+        let last_token = rest.split_whitespace().last().unwrap_or("").trim_start_matches('@');
+        let prefix_end = buf.len() - last_token.len();
+        let base = buf[..prefix_end].to_string();
+        (base, last_token, user_names.iter().map(|s| s.as_str()).collect())
     } else {
         return;
     };
@@ -21,7 +24,7 @@ pub fn tab_complete_channel(buf: &mut String, channels: &[(String, String)], use
 
     if matches.len() == 1 {
         buf.clear();
-        buf.push_str(prefix);
+        buf.push_str(&prefix);
         buf.push_str(matches[0]);
     } else if matches.len() > 1 {
         let mut common = matches[0].to_string();
@@ -30,7 +33,7 @@ pub fn tab_complete_channel(buf: &mut String, channels: &[(String, String)], use
         }
         if common.len() > partial.len() {
             buf.clear();
-            buf.push_str(prefix);
+            buf.push_str(&prefix);
             buf.push_str(&common);
         }
     }
@@ -41,8 +44,9 @@ pub fn ghost_completion(buf: &str, channels: &[(String, String)], user_names: &[
         (rest.trim_start_matches('#'), channels.iter().map(|(_, name)| name.as_str()).collect())
     } else if let Some(rest) = buf.strip_prefix("c ") {
         (rest.trim_start_matches('#'), channels.iter().map(|(_, name)| name.as_str()).collect())
-    } else if let Some(rest) = buf.strip_prefix("ping ") {
-        (rest.trim_start_matches('@'), user_names.iter().map(|s| s.as_str()).collect())
+    } else if let Some(rest) = buf.strip_prefix("search ") {
+        let last_token = rest.split_whitespace().last().unwrap_or("").trim_start_matches('@');
+        (last_token, user_names.iter().map(|s| s.as_str()).collect())
     } else {
         return String::new();
     };

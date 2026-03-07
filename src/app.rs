@@ -15,13 +15,13 @@ use std::time::{Duration, Instant};
 
 enum SelectResult {
     Channel(String, String),
-    Ping(String),
+    Search(Vec<String>),
     Quit,
 }
 
 enum TrackResult {
     BackToSelect,
-    Ping(String),
+    Search(Vec<String>),
     Quit,
 }
 
@@ -91,9 +91,9 @@ impl App {
         loop {
             let selected = match self.select_channel() {
                 SelectResult::Channel(id, name) => (id, name),
-                SelectResult::Ping(display_name) => match self.track_ping(&display_name) {
+                SelectResult::Search(handles) => match self.track_search(&handles) {
                     TrackResult::Quit => break,
-                    TrackResult::BackToSelect | TrackResult::Ping(_) => continue,
+                    TrackResult::BackToSelect | TrackResult::Search(_) => continue,
                 },
                 SelectResult::Quit => break,
             };
@@ -101,9 +101,9 @@ impl App {
             match self.track_messages_filtered(vec![selected], None) {
                 TrackResult::Quit => break,
                 TrackResult::BackToSelect => continue,
-                TrackResult::Ping(display_name) => match self.track_ping(&display_name) {
+                TrackResult::Search(handles) => match self.track_search(&handles) {
                     TrackResult::Quit => break,
-                    TrackResult::BackToSelect | TrackResult::Ping(_) => continue,
+                    TrackResult::BackToSelect | TrackResult::Search(_) => continue,
                 },
             }
         }
@@ -178,11 +178,17 @@ impl App {
                             {
                                 return SelectResult::Channel(ch.0, ch.1);
                             }
-                            let ping_arg = cmd.strip_prefix("ping ");
-                            if let Some(handle) = ping_arg
-                                && let Some(display_name) = self.client.find_user_display_name(handle)
-                            {
-                                return SelectResult::Ping(display_name);
+                            if let Some(rest) = cmd.strip_prefix("search ") {
+                                let handles: Vec<String> = rest
+                                    .split_whitespace()
+                                    .filter_map(|h| {
+                                        let h = h.trim_start_matches('@');
+                                        self.client.find_user_display_name(h)
+                                    })
+                                    .collect();
+                                if !handles.is_empty() {
+                                    return SelectResult::Search(handles);
+                                }
                             }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
@@ -385,11 +391,17 @@ impl App {
                                 filter.clear();
                                 filter_editing = false;
                             }
-                            let ping_arg = cmd.strip_prefix("ping ");
-                            if let Some(handle) = ping_arg
-                                && let Some(display_name) = self.client.find_user_display_name(handle)
-                            {
-                                return TrackResult::Ping(display_name);
+                            if let Some(rest) = cmd.strip_prefix("search ") {
+                                let handles: Vec<String> = rest
+                                    .split_whitespace()
+                                    .filter_map(|h| {
+                                        let h = h.trim_start_matches('@');
+                                        self.client.find_user_display_name(h)
+                                    })
+                                    .collect();
+                                if !handles.is_empty() {
+                                    return TrackResult::Search(handles);
+                                }
                             }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
@@ -651,12 +663,15 @@ impl App {
         }
     }
 
-    fn track_ping(&mut self, display_name: &str) -> TrackResult {
-        let user_id = self.client.find_user_id(display_name);
-        let search_query = match &user_id {
-            Some(id) => format!("<@{}>", id),
-            None => format!("@{}", display_name),
-        };
+    fn track_search(&mut self, display_names: &[String]) -> TrackResult {
+        let search_queries: Vec<String> = display_names
+            .iter()
+            .map(|name| match self.client.find_user_id(name) {
+                Some(id) => format!("<@{}>", id),
+                None => format!("@{}", name),
+            })
+            .collect();
+        let search_query = search_queries.join(" ");
 
         let mut messages: Vec<TrackedMessage> = Vec::new();
         let mut seen: HashMap<String, usize> = HashMap::new();
@@ -665,7 +680,7 @@ impl App {
         let mut pending_g: Option<char> = None;
         let mut count_buf: u32 = 0;
 
-        let ping_label = format!("@{}", display_name);
+        let search_label = display_names.iter().map(|n| format!("@{}", n)).collect::<Vec<_>>().join(" ");
 
         loop {
             let visible_count = messages.iter().filter(|m| m.status != model::Status::Completed).count();
@@ -685,11 +700,17 @@ impl App {
                             if cmd == "c" || cmd == "channel" {
                                 return TrackResult::BackToSelect;
                             }
-                            let ping_arg = cmd.strip_prefix("ping ");
-                            if let Some(handle) = ping_arg
-                                && let Some(name) = self.client.find_user_display_name(handle)
-                            {
-                                return TrackResult::Ping(name);
+                            if let Some(rest) = cmd.strip_prefix("search ") {
+                                let handles: Vec<String> = rest
+                                    .split_whitespace()
+                                    .filter_map(|h| {
+                                        let h = h.trim_start_matches('@');
+                                        self.client.find_user_display_name(h)
+                                    })
+                                    .collect();
+                                if !handles.is_empty() {
+                                    return TrackResult::Search(handles);
+                                }
                             }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
@@ -795,35 +816,35 @@ impl App {
 
                 if let Ok(resp) = self.client.search_messages(&search_query)
                     && let Some(search_msgs) = resp.messages
-                        && let Some(matches) = search_msgs.matches
-                    {
-                        for m in &matches {
-                            let status = model::determine_status_from_reactions(&m.reactions, &self.config.reactions);
+                    && let Some(matches) = search_msgs.matches
+                {
+                    for m in &matches {
+                        let status = model::determine_status_from_reactions(&m.reactions, &self.config.reactions);
 
-                            if let Some(&idx) = seen.get(&m.ts) {
-                                messages[idx].status = status;
-                            } else {
-                                let (channel_id, channel_name) = match &m.channel {
-                                    Some(ch) => (ch.id.clone(), ch.name.clone()),
-                                    None => ("unknown".to_string(), "unknown".to_string()),
-                                };
-                                let user_id_str = m.user.as_deref().unwrap_or("unknown");
-                                let resolved_name = self.client.resolve_user(user_id_str);
-                                let raw_text = m.text.as_deref().unwrap_or("").to_string();
-                                let text = self.resolve_mentions(&raw_text);
+                        if let Some(&idx) = seen.get(&m.ts) {
+                            messages[idx].status = status;
+                        } else {
+                            let (channel_id, channel_name) = match &m.channel {
+                                Some(ch) => (ch.id.clone(), ch.name.clone()),
+                                None => ("unknown".to_string(), "unknown".to_string()),
+                            };
+                            let user_id_str = m.user.as_deref().unwrap_or("unknown");
+                            let resolved_name = self.client.resolve_user(user_id_str);
+                            let raw_text = m.text.as_deref().unwrap_or("").to_string();
+                            let text = self.resolve_mentions(&raw_text);
 
-                                seen.insert(m.ts.clone(), messages.len());
-                                messages.push(TrackedMessage {
-                                    channel_id,
-                                    channel_name,
-                                    ts: m.ts.clone(),
-                                    display_name: resolved_name,
-                                    text,
-                                    status,
-                                });
-                            }
+                            seen.insert(m.ts.clone(), messages.len());
+                            messages.push(TrackedMessage {
+                                channel_id,
+                                channel_name,
+                                ts: m.ts.clone(),
+                                display_name: resolved_name,
+                                text,
+                                status,
+                            });
                         }
                     }
+                }
             }
 
             let command_buf_snapshot = self.command_buf.clone();
@@ -832,7 +853,7 @@ impl App {
             let config = &self.config;
             let pi = self.poll_interval;
             let pe = last_poll.map(|t| t.elapsed());
-            let ping_label_snap = ping_label.clone();
+            let ping_label_snap = search_label.clone();
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
