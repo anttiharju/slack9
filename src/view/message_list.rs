@@ -5,6 +5,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding, Paragraph};
+use std::time::Duration;
 
 use super::{command_bar, filter_bar};
 
@@ -19,6 +20,8 @@ pub fn render(
     tracked_channels: &[(String, String)],
     config: &Config,
     list_state: &mut ListState,
+    poll_interval: Duration,
+    poll_elapsed: Option<Duration>,
 ) {
     let in_command_mode = command_buf.is_some();
     let in_filter_mode = filter_editing;
@@ -106,6 +109,31 @@ pub fn render(
 
     frame.render_stateful_widget(list, list_area, list_state);
 
-    let status_line = Paragraph::new("");
+    let total_blocks = poll_interval.as_secs().max(1) as usize;
+    let spans = match poll_elapsed {
+        Some(elapsed) => {
+            let elapsed_secs = elapsed.as_secs() as usize;
+            if elapsed_secs < 1 {
+                // Just polled — flash all green
+                vec![Span::styled("\u{2588}".repeat(total_blocks), Style::default().fg(Color::Green))]
+            } else {
+                let remaining = total_blocks.saturating_sub(elapsed_secs);
+                let consumed = total_blocks - remaining;
+                let mut s = Vec::new();
+                if remaining > 0 {
+                    s.push(Span::styled("\u{2588}".repeat(remaining), Style::default().fg(Color::DarkGray)));
+                }
+                if consumed > 0 {
+                    s.push(Span::styled("\u{2591}".repeat(consumed), Style::default().fg(Color::DarkGray)));
+                }
+                s
+            }
+        }
+        None => {
+            // Haven't polled yet — show all dim
+            vec![Span::styled("\u{2591}".repeat(total_blocks), Style::default().fg(Color::DarkGray))]
+        }
+    };
+    let status_line = Paragraph::new(Line::from(spans));
     frame.render_widget(status_line, status_area);
 }

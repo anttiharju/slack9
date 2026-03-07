@@ -569,6 +569,8 @@ impl App {
             let config = &self.config;
             let filter_snap = filter.clone();
             let fe = filter_editing;
+            let pi = self.poll_interval;
+            let pe = last_poll.map(|t| t.elapsed());
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -583,6 +585,8 @@ impl App {
                         &channels,
                         config,
                         &mut list_state,
+                        pi,
+                        pe,
                     );
                 })
                 .expect("failed to draw");
