@@ -135,7 +135,7 @@ fn main() {
                     KeyCode::Enter => {
                         let cmd = buf.trim().to_string();
                         command_buf = None;
-                        if cmd == "q" {
+                        if cmd == "q" || cmd == "q!" {
                             break;
                         }
                     }
