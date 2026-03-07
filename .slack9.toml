@@ -1,3 +1,5 @@
 [header]
 past = "24h"
 poll = "10s"
+
+hide = ["white_check_mark"]

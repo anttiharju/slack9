@@ -155,7 +155,7 @@ impl App {
     }
 
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
-        let new_msgs = fetch_messages(&self.client, source, self.past, &seen.keys().cloned().collect());
+        let (new_msgs, _) = fetch_messages(&self.client, source, self.past, &seen.keys().cloned().collect(), &self.config.header.hide);
         for msg in new_msgs {
             if !seen.contains_key(&msg.ts) {
                 seen.insert(msg.ts.clone(), messages.len());
@@ -171,7 +171,7 @@ impl App {
         let mut list_state = ListState::default();
         let mut pending_g: Option<char> = None;
         let mut count_buf: u32 = 0;
-        let (tx, rx) = mpsc::channel::<(u64, Vec<TrackedMessage>)>();
+        let (tx, rx) = mpsc::channel::<(u64, Vec<TrackedMessage>, Vec<String>)>();
         let mut poll_generation: u64 = 0;
         let mut poll_in_flight = false;
 
@@ -330,9 +330,22 @@ impl App {
             }
 
             // Receive results from background poll
-            if let Ok((generation, new_msgs)) = rx.try_recv() {
+            if let Ok((generation, new_msgs, hide_ts)) = rx.try_recv() {
                 poll_in_flight = false;
                 if generation == poll_generation {
+                    // Remove messages that now have hidden reactions
+                    if !hide_ts.is_empty() {
+                        messages.retain(|m| !hide_ts.contains(&m.ts));
+                        seen.clear();
+                        for (i, m) in messages.iter().enumerate() {
+                            seen.insert(m.ts.clone(), i);
+                        }
+                        // Fix selection if it's now out of bounds
+                        if let Some(sel) = list_state.selected()
+                            && sel >= messages.len() {
+                                list_state.select(if messages.is_empty() { None } else { Some(messages.len() - 1) });
+                            }
+                    }
                     for msg in new_msgs {
                         if !seen.contains_key(&msg.ts) {
                             seen.insert(msg.ts.clone(), messages.len());
@@ -351,10 +364,11 @@ impl App {
                 let past = self.past;
                 let seen_keys: HashSet<String> = seen.keys().cloned().collect();
                 let generation = poll_generation;
+                let hide = self.config.header.hide.clone();
                 let tx = tx.clone();
                 std::thread::spawn(move || {
-                    let results = fetch_messages(&client, &source_clone, past, &seen_keys);
-                    let _ = tx.send((generation, results));
+                    let (results, hide_ts) = fetch_messages(&client, &source_clone, past, &seen_keys, &hide);
+                    let _ = tx.send((generation, results, hide_ts));
                 });
             }
 
@@ -410,8 +424,22 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
     result
 }
 
-fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, seen_keys: &HashSet<String>) -> Vec<TrackedMessage> {
+fn has_hidden_reaction(reactions: &[crate::slack::Reaction], hide: &[String]) -> bool {
+    if hide.is_empty() {
+        return false;
+    }
+    reactions.iter().any(|r| hide.iter().any(|h| h == &r.name))
+}
+
+fn fetch_messages(
+    client: &SlackClient,
+    source: &MessageSource,
+    past: Duration,
+    seen_keys: &HashSet<String>,
+    hide: &[String],
+) -> (Vec<TrackedMessage>, Vec<String>) {
     let mut results = Vec::new();
+    let mut hide_ts = Vec::new();
     match source {
         MessageSource::Channels(channels) => {
             for (channel_id, channel_name) in channels {
@@ -419,7 +447,13 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
                     && let Some(msgs) = resp.messages
                 {
                     for msg in msgs.iter().rev() {
-                        if !seen_keys.contains(&msg.ts) {
+                        let dominated = has_hidden_reaction(&msg.reactions, hide);
+                        if seen_keys.contains(&msg.ts) {
+                            // Already shown — check if it should now be hidden
+                            if dominated {
+                                hide_ts.push(msg.ts.clone());
+                            }
+                        } else if !dominated {
                             let user_id = msg.user.as_deref().unwrap_or("unknown");
                             let display_name = client.resolve_user(user_id);
                             let raw_text = msg.text.as_deref().unwrap_or("").to_string();
@@ -443,27 +477,37 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
                 && let Some(matches) = search_msgs.matches
             {
                 for m in &matches {
-                    if !seen_keys.contains(&m.ts) {
-                        let (channel_id, channel_name) = match &m.channel {
-                            Some(ch) => (ch.id.clone(), ch.name.clone()),
-                            None => ("unknown".to_string(), "unknown".to_string()),
-                        };
-                        let user_id_str = m.user.as_deref().unwrap_or("unknown");
-                        let display_name = client.resolve_user(user_id_str);
-                        let raw_text = m.text.as_deref().unwrap_or("").to_string();
-                        let text = resolve_mentions(client, &raw_text);
-
-                        results.push(TrackedMessage {
-                            channel_id,
-                            channel_name,
-                            ts: m.ts.clone(),
-                            display_name,
-                            text,
-                        });
+                    let (channel_id, channel_name) = match &m.channel {
+                        Some(ch) => (ch.id.clone(), ch.name.clone()),
+                        None => ("unknown".to_string(), "unknown".to_string()),
+                    };
+                    if !hide.is_empty()
+                        && let Ok(rr) = client.reactions_get(&channel_id, &m.ts)
+                            && let Some(msg) = &rr.message
+                                && has_hidden_reaction(&msg.reactions, hide) {
+                                    if seen_keys.contains(&m.ts) {
+                                        hide_ts.push(m.ts.clone());
+                                    }
+                                    continue;
+                                }
+                    if seen_keys.contains(&m.ts) {
+                        continue;
                     }
+                    let user_id_str = m.user.as_deref().unwrap_or("unknown");
+                    let display_name = client.resolve_user(user_id_str);
+                    let raw_text = m.text.as_deref().unwrap_or("").to_string();
+                    let text = resolve_mentions(client, &raw_text);
+
+                    results.push(TrackedMessage {
+                        channel_id,
+                        channel_name,
+                        ts: m.ts.clone(),
+                        display_name,
+                        text,
+                    });
                 }
             }
         }
     }
-    results
+    (results, hide_ts)
 }

@@ -231,4 +231,22 @@ impl SlackClient {
             .json::<SearchMessagesResponse>()
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
+
+    /// Fetch reactions for a specific message.
+    pub fn reactions_get(&self, channel: &str, timestamp: &str) -> Result<ReactionsGetResponse, String> {
+        let url = format!("{}/api/reactions.get", self.workspace_url);
+
+        let response = self
+            .client
+            .post(&url)
+            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(COOKIE, format!("d={}", self.xoxd))
+            .body(format!("token={}&channel={}&timestamp={}", self.xoxc, channel, timestamp))
+            .send()
+            .map_err(|e| format!("Request failed: {}", e))?;
+
+        response
+            .json::<ReactionsGetResponse>()
+            .map_err(|e| format!("Failed to parse response: {}", e))
+    }
 }

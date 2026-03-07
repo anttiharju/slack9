@@ -19,6 +19,8 @@ pub struct HeaderConfig {
     pub past: String,
     #[serde(default = "default_poll", skip_serializing_if = "is_default_poll")]
     pub poll: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hide: Vec<String>,
 }
 
 impl Default for HeaderConfig {
@@ -26,6 +28,7 @@ impl Default for HeaderConfig {
         Self {
             past: default_past(),
             poll: default_poll(),
+            hide: Vec::new(),
         }
     }
 }
@@ -48,7 +51,7 @@ fn is_default_poll(v: &str) -> bool {
 
 impl HeaderConfig {
     fn is_default(&self) -> bool {
-        self.past == DEFAULT_PAST && self.poll == DEFAULT_POLL
+        self.past == DEFAULT_PAST && self.poll == DEFAULT_POLL && self.hide.is_empty()
     }
 
     pub fn past_duration(&self) -> Result<Duration, String> {
@@ -81,7 +84,10 @@ impl fmt::Display for Config {
         writeln!(f, "Config (~/.slack9.toml):")?;
         writeln!(f, "  [header]")?;
         writeln!(f, "    past: {}", self.header.past)?;
-        write!(f, "    poll: {}", self.header.poll)?;
+        writeln!(f, "    poll: {}", self.header.poll)?;
+        if !self.header.hide.is_empty() {
+            write!(f, "    hide: {:?}", self.header.hide)?;
+        }
         Ok(())
     }
 }

@@ -76,6 +76,16 @@ pub struct Message {
     #[serde(rename = "type")]
     pub msg_type: Option<String>,
     pub subtype: Option<String>,
+    #[serde(default)]
+    pub reactions: Vec<Reaction>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct Reaction {
+    pub name: String,
+    pub count: Option<u32>,
+    pub users: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,6 +110,8 @@ pub struct SearchMatch {
     pub text: Option<String>,
     pub user: Option<String>,
     pub channel: Option<SearchChannel>,
+    #[serde(default)]
+    pub reactions: Vec<Reaction>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,4 +119,19 @@ pub struct SearchMatch {
 pub struct SearchChannel {
     pub id: String,
     pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct ReactionsGetResponse {
+    pub ok: bool,
+    pub message: Option<ReactionsGetMessage>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct ReactionsGetMessage {
+    #[serde(default)]
+    pub reactions: Vec<Reaction>,
 }
