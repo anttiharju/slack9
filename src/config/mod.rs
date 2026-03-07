@@ -6,10 +6,10 @@ use std::time::Duration;
 
 #[derive(Debug, Deserialize)]
 pub struct ReactionsConfig {
-    pub seen: Vec<String>,
-    pub progressing: Vec<String>,
+    pub backlog: Vec<String>,
+    pub taking_a_look: Vec<String>,
     pub blocked: Vec<String>,
-    pub complete: Vec<String>,
+    pub completed: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,10 +37,10 @@ impl fmt::Display for Config {
         writeln!(f, "  time_window: {}", self.time_window)?;
         writeln!(f, "  poll_interval: {}", self.poll_interval)?;
         writeln!(f, "  reactions:")?;
-        writeln!(f, "    seen: {}", self.reactions.seen.join(", "))?;
-        writeln!(f, "    progressing: {}", self.reactions.progressing.join(", "))?;
+        writeln!(f, "    backlog: {}", self.reactions.backlog.join(", "))?;
+        writeln!(f, "    taking_a_look: {}", self.reactions.taking_a_look.join(", "))?;
         writeln!(f, "    blocked: {}", self.reactions.blocked.join(", "))?;
-        write!(f, "    complete: {}", self.reactions.complete.join(", "))
+        write!(f, "    completed: {}", self.reactions.completed.join(", "))
     }
 }
 

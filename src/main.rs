@@ -3,9 +3,44 @@ mod config;
 mod exitcode;
 mod slack;
 
-use std::collections::{HashMap, HashSet};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode};
+use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
+use ratatui::style::{Color, Modifier, Style};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, List, ListItem, Padding};
+use std::collections::HashMap;
 use std::env;
-use std::thread;
+use std::io;
+use std::time::{Duration, Instant};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Status {
+    Backlog,
+    TakingALook,
+    Blocked,
+    Completed,
+}
+
+struct TrackedMessage {
+    channel_name: String,
+    display_name: String,
+    text: String,
+    status: Status,
+}
+
+fn determine_status(msg: &slack::Message, reactions: &config::ReactionsConfig) -> Status {
+    if msg.has_any_reaction(&reactions.completed) {
+        Status::Completed
+    } else if msg.has_any_reaction(&reactions.blocked) {
+        Status::Blocked
+    } else if msg.has_any_reaction(&reactions.taking_a_look) {
+        Status::TakingALook
+    } else {
+        Status::Backlog
+    }
+}
 
 fn main() {
     cli::parse_args();
@@ -14,7 +49,6 @@ fn main() {
         eprintln!("Error: {}", e);
         std::process::exit(exitcode::config_load_error());
     });
-    println!("{}", config);
 
     let time_window = config.time_window_duration().unwrap_or_else(|e| {
         eprintln!("Error: invalid time_window: {}", e);
@@ -44,13 +78,7 @@ fn main() {
     let mut client = slack::SlackClient::new(workspace_url, xoxd, xoxc);
 
     match client.auth_test() {
-        Ok(response) if response.ok => {
-            println!(
-                "Authenticated as {} in {}",
-                response.user.unwrap_or_default(),
-                response.team.unwrap_or_default()
-            );
-        }
+        Ok(response) if response.ok => {}
         Ok(response) => {
             eprintln!("Auth failed: {}", response.error.unwrap_or_else(|| "unknown error".to_string()));
             std::process::exit(exitcode::auth_rejected());
@@ -76,69 +104,105 @@ fn main() {
         std::process::exit(exitcode::channel_resolve_error());
     });
 
-    for (id, name) in &channels {
-        println!("  #{} ({})", name, id);
-    }
-    println!();
+    // Setup terminal
+    enable_raw_mode().expect("failed to enable raw mode");
+    let mut stdout = io::stdout();
+    crossterm::execute!(stdout, EnterAlternateScreen).expect("failed to enter alternate screen");
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend).expect("failed to create terminal");
 
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut status_seen: HashMap<String, String> = HashMap::new();
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic| {
+        let _ = disable_raw_mode();
+        let _ = crossterm::execute!(io::stdout(), LeaveAlternateScreen);
+        original_hook(panic);
+    }));
+
+    let mut messages: Vec<TrackedMessage> = Vec::new();
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut last_poll: Option<Instant> = None;
 
     loop {
-        for (channel_id, channel_name) in &channels {
-            match client.conversations_history(channel_id, time_window) {
-                Ok(resp) if resp.ok => {
-                    if let Some(messages) = resp.messages {
-                        for msg in messages.iter().rev() {
-                            if seen.insert(msg.ts.clone()) {
-                                let user = msg.user.as_deref().unwrap_or("unknown");
-                                let display_name = client.resolve_user(user);
-                                let text = msg.text.as_deref().unwrap_or("");
-                                println!("[{}] #{} @{}: {}", msg.timestamp(), channel_name, display_name, text);
+        if event::poll(Duration::from_millis(100)).unwrap_or(false)
+            && let Ok(Event::Key(key)) = event::read()
+                && key.kind == KeyEventKind::Press && key.code == KeyCode::Char('q') {
+                    break;
+                }
 
-                                for reaction in &config.reactions.seen {
-                                    if let Err(e) = client.reactions_add(channel_id, &msg.ts, reaction) {
-                                        eprintln!("Failed to react with :{}: {}", reaction, e);
-                                    }
-                                }
-                            }
+        if last_poll.is_none_or(|t| t.elapsed() >= poll_interval) {
+            last_poll = Some(Instant::now());
 
-                            let new_status = if msg.has_any_reaction(&config.reactions.complete) {
-                                Some("completed")
-                            } else if msg.has_any_reaction(&config.reactions.blocked) {
-                                Some("blocked")
-                            } else if msg.has_any_reaction(&config.reactions.progressing) {
-                                Some("progressing")
+            for (channel_id, channel_name) in &channels {
+                if let Ok(resp) = client.conversations_history(channel_id, time_window)
+                    && let Some(msgs) = resp.messages {
+                        for msg in msgs.iter().rev() {
+                            let status = determine_status(msg, &config.reactions);
+
+                            if let Some(&idx) = seen.get(&msg.ts) {
+                                messages[idx].status = status;
                             } else {
-                                None
-                            };
-
-                            if let Some(status) = new_status {
-                                let prev = status_seen.get(&msg.ts).map(|s| s.as_str());
-                                if prev != Some(status) {
-                                    let user = msg.user.as_deref().unwrap_or("unknown");
-                                    let display_name = client.resolve_user(user);
-                                    let text = msg.text.as_deref().unwrap_or("");
-                                    println!("[{}] #{} @{}: {}", status, channel_name, display_name, text);
-                                    status_seen.insert(msg.ts.clone(), status.to_string());
+                                for reaction in &config.reactions.backlog {
+                                    let _ = client.reactions_add(channel_id, &msg.ts, reaction);
                                 }
+
+                                let user_id = msg.user.as_deref().unwrap_or("unknown");
+                                let display_name = client.resolve_user(user_id);
+                                let text = msg.text.as_deref().unwrap_or("").to_string();
+
+                                seen.insert(msg.ts.clone(), messages.len());
+                                messages.push(TrackedMessage {
+                                    channel_name: channel_name.clone(),
+                                    display_name,
+                                    text,
+                                    status,
+                                });
                             }
                         }
                     }
-                }
-                Ok(resp) => {
-                    eprintln!(
-                        "Error fetching #{}: {}",
-                        channel_name,
-                        resp.error.unwrap_or_else(|| "unknown error".to_string())
-                    );
-                }
-                Err(e) => {
-                    eprintln!("Error fetching #{}: {}", channel_name, e);
-                }
             }
         }
 
-        thread::sleep(poll_interval);
+        terminal
+            .draw(|frame| {
+                let items: Vec<ListItem> = messages
+                    .iter()
+                    .filter(|m| m.status != Status::Completed)
+                    .map(|m| {
+                        let (label, color) = match m.status {
+                            Status::Backlog => ("backlog", Color::Yellow),
+                            Status::TakingALook => ("taking a look", Color::Blue),
+                            Status::Blocked => ("blocked", Color::Red),
+                            Status::Completed => unreachable!(),
+                        };
+                        ListItem::new(Line::from(vec![
+                            Span::styled(format!("[{:<14}] ", label), Style::default().fg(color).add_modifier(Modifier::BOLD)),
+                            Span::styled(format!("#{} ", m.channel_name), Style::default().fg(Color::DarkGray)),
+                            Span::styled(format!("@{}", m.display_name), Style::default().fg(Color::Cyan)),
+                            Span::raw(format!(": {}", m.text)),
+                        ]))
+                    })
+                    .collect();
+
+                let channel_list: String = channels.iter().map(|(_, name)| format!("#{}", name)).collect::<Vec<_>>().join(", ");
+
+                let title = format!(
+                    " slackemon \u{2014} {} (every {}, {} window) ",
+                    channel_list, config.poll_interval, config.time_window,
+                );
+
+                let list = List::new(items).block(
+                    Block::default()
+                        .title(title)
+                        .title_bottom(" q: quit ")
+                        .borders(Borders::ALL)
+                        .padding(Padding::new(1, 1, 0, 0)),
+                );
+
+                frame.render_widget(list, frame.area());
+            })
+            .expect("failed to draw");
     }
+
+    disable_raw_mode().expect("failed to disable raw mode");
+    crossterm::execute!(terminal.backend_mut(), LeaveAlternateScreen).expect("failed to leave alternate screen");
 }

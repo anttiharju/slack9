@@ -100,44 +100,6 @@ impl Message {
     pub fn has_any_reaction(&self, names: &[String]) -> bool {
         names.iter().any(|n| self.has_reaction(n))
     }
-
-    pub fn timestamp(&self) -> String {
-        if let Some(dot) = self.ts.find('.')
-            && let Ok(secs) = self.ts[..dot].parse::<u64>()
-        {
-            return format_unix_timestamp(secs);
-        }
-        self.ts.clone()
-    }
-}
-
-fn format_unix_timestamp(secs: u64) -> String {
-    // Simple UTC formatting without external crates
-    let days = secs / 86400;
-    let time_of_day = secs % 86400;
-    let hours = time_of_day / 3600;
-    let minutes = (time_of_day % 3600) / 60;
-    let seconds = time_of_day % 60;
-
-    // Days since 1970-01-01
-    let (year, month, day) = days_to_ymd(days);
-
-    format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", year, month, day, hours, minutes, seconds)
-}
-
-fn days_to_ymd(mut days: u64) -> (u64, u64, u64) {
-    // Civil days to Y-M-D (algorithm from Howard Hinnant)
-    days += 719468;
-    let era = days / 146097;
-    let doe = days - era * 146097;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d)
 }
 
 pub struct SlackClient {
