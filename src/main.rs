@@ -60,18 +60,18 @@ fn main() {
         std::process::exit(exitcode::invalid_poll_interval());
     });
 
-    let xoxd = env::var("slack9s_XOXD").unwrap_or_else(|_| {
-        eprintln!("Error: slack9s_XOXD environment variable not set");
+    let xoxd = env::var("SLACK9S_XOXD").unwrap_or_else(|_| {
+        eprintln!("Error: SLACK9S_XOXD environment variable not set");
         std::process::exit(exitcode::missing_xoxd());
     });
 
-    let xoxc = env::var("slack9s_XOXC").unwrap_or_else(|_| {
-        eprintln!("Error: slack9s_XOXC environment variable not set");
+    let xoxc = env::var("SLACK9S_XOXC").unwrap_or_else(|_| {
+        eprintln!("Error: SLACK9S_XOXC environment variable not set");
         std::process::exit(exitcode::missing_xoxc());
     });
 
-    let workspace_url = env::var("slack9s_WORKSPACE_URL").unwrap_or_else(|_| {
-        eprintln!("Error: slack9s_WORKSPACE_URL environment variable not set");
+    let workspace_url = env::var("SLACK9S_WORKSPACE_URL").unwrap_or_else(|_| {
+        eprintln!("Error: SLACK9S_WORKSPACE_URL environment variable not set");
         std::process::exit(exitcode::missing_workspace_url());
     });
 
