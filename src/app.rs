@@ -34,8 +34,8 @@ pub struct App {
     team_name: String,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
-    time_window: Duration,
-    poll_interval: Duration,
+    past: Duration,
+    poll: Duration,
 }
 
 impl App {
@@ -45,8 +45,8 @@ impl App {
         all_channels: Vec<(String, String)>,
         team_id: String,
         team_name: String,
-        time_window: Duration,
-        poll_interval: Duration,
+        past: Duration,
+        poll: Duration,
     ) -> Self {
         enable_raw_mode().expect("failed to enable raw mode");
         let mut stdout = io::stdout();
@@ -70,8 +70,8 @@ impl App {
             team_name,
             terminal,
             command_buf: None,
-            time_window,
-            poll_interval,
+            past,
+            poll,
         }
     }
 
@@ -246,9 +246,9 @@ impl App {
             let command_buf_snapshot = self.command_buf.clone();
             let all_channels = &self.all_channels;
             let user_names = &self.user_names;
-            let poll_label = self.config.poll_interval_label();
+            let poll_label = self.config.poll_label();
             let workspace_label = self.team_name.clone();
-            let time_window_label = self.config.time_window_label();
+            let past_label = self.config.past_label();
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -261,7 +261,7 @@ impl App {
                         &mut list_state,
                         &poll_label,
                         &workspace_label,
-                        &time_window_label,
+                        &past_label,
                     );
                 })
                 .expect("failed to draw");
@@ -414,11 +414,11 @@ impl App {
                 }
             }
 
-            if last_poll.is_none_or(|t| t.elapsed() >= self.poll_interval) {
+            if last_poll.is_none_or(|t| t.elapsed() >= self.poll) {
                 last_poll = Some(Instant::now());
 
                 for (channel_id, channel_name) in &channels {
-                    if let Ok(resp) = self.client.conversations_history(channel_id, self.time_window)
+                    if let Ok(resp) = self.client.conversations_history(channel_id, self.past)
                         && let Some(msgs) = resp.messages
                     {
                         for msg in msgs.iter().rev() {
@@ -453,7 +453,7 @@ impl App {
             let all_channels = &self.all_channels;
             let user_names = &self.user_names;
             let config = &self.config;
-            let pi = self.poll_interval;
+            let pi = self.poll;
             let pe = last_poll.map(|t| t.elapsed());
             let team_name = &self.team_name;
             self.terminal
@@ -622,7 +622,7 @@ impl App {
                 }
             }
 
-            if last_poll.is_none_or(|t| t.elapsed() >= self.poll_interval) {
+            if last_poll.is_none_or(|t| t.elapsed() >= self.poll) {
                 last_poll = Some(Instant::now());
 
                 if let Ok(resp) = self.client.search_messages(&search_query)
@@ -664,7 +664,7 @@ impl App {
             let all_channels = &self.all_channels;
             let user_names = &self.user_names;
             let config = &self.config;
-            let pi = self.poll_interval;
+            let pi = self.poll;
             let pe = last_poll.map(|t| t.elapsed());
             let team_name = &self.team_name;
             self.terminal

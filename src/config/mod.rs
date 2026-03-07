@@ -4,56 +4,56 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
-const DEFAULT_TIME_WINDOW: &str = "24h";
-const DEFAULT_POLL_INTERVAL: &str = "10s";
+const DEFAULT_PAST: &str = "24h";
+const DEFAULT_POLL: &str = "10s";
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
-    #[serde(default = "default_time_window")]
-    pub time_window: String,
-    #[serde(default = "default_poll_interval")]
-    pub poll_interval: String,
+    #[serde(default = "default_past")]
+    pub past: String,
+    #[serde(default = "default_poll")]
+    pub poll: String,
 }
 
 impl Default for Config {
     fn default() -> Self {
         Self {
-            time_window: default_time_window(),
-            poll_interval: default_poll_interval(),
+            past: default_past(),
+            poll: default_poll(),
         }
     }
 }
 
-fn default_time_window() -> String {
-    DEFAULT_TIME_WINDOW.to_string()
+fn default_past() -> String {
+    DEFAULT_PAST.to_string()
 }
 
-fn default_poll_interval() -> String {
-    DEFAULT_POLL_INTERVAL.to_string()
+fn default_poll() -> String {
+    DEFAULT_POLL.to_string()
 }
 
 impl Config {
-    pub fn time_window_duration(&self) -> Result<Duration, String> {
-        parse_duration(&self.time_window)
+    pub fn past_duration(&self) -> Result<Duration, String> {
+        parse_duration(&self.past)
     }
 
-    pub fn poll_interval_duration(&self) -> Result<Duration, String> {
-        parse_duration(&self.poll_interval)
+    pub fn poll_duration(&self) -> Result<Duration, String> {
+        parse_duration(&self.poll)
     }
 
-    pub fn time_window_label(&self) -> String {
-        if self.time_window == DEFAULT_TIME_WINDOW {
-            format!("{} (default)", self.time_window)
+    pub fn past_label(&self) -> String {
+        if self.past == DEFAULT_PAST {
+            format!("{} (default)", self.past)
         } else {
-            self.time_window.clone()
+            self.past.clone()
         }
     }
 
-    pub fn poll_interval_label(&self) -> String {
-        if self.poll_interval == DEFAULT_POLL_INTERVAL {
-            format!("{} (default)", self.poll_interval)
+    pub fn poll_label(&self) -> String {
+        if self.poll == DEFAULT_POLL {
+            format!("{} (default)", self.poll)
         } else {
-            self.poll_interval.clone()
+            self.poll.clone()
         }
     }
 }
@@ -61,8 +61,8 @@ impl Config {
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Config (~/.slack9.toml):")?;
-        writeln!(f, "  time_window: {}", self.time_window)?;
-        write!(f, "  poll_interval: {}", self.poll_interval)?;
+        writeln!(f, "  past: {}", self.past)?;
+        write!(f, "  poll: {}", self.poll)?;
         Ok(())
     }
 }

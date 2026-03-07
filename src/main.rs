@@ -14,14 +14,14 @@ fn main() {
 
     let config = config::load();
 
-    let time_window = config.time_window_duration().unwrap_or_else(|e| {
-        eprintln!("Error: invalid time_window: {}", e);
-        std::process::exit(exitcode::invalid_time_window());
+    let past = config.past_duration().unwrap_or_else(|e| {
+        eprintln!("Error: invalid past: {}", e);
+        std::process::exit(exitcode::invalid_past());
     });
 
-    let poll_interval = config.poll_interval_duration().unwrap_or_else(|e| {
-        eprintln!("Error: invalid poll_interval: {}", e);
-        std::process::exit(exitcode::invalid_poll_interval());
+    let poll = config.poll_duration().unwrap_or_else(|e| {
+        eprintln!("Error: invalid poll: {}", e);
+        std::process::exit(exitcode::invalid_poll());
     });
 
     let workspace_url = env::var("SLACK9_WORKSPACE").unwrap_or_else(|_| {
@@ -70,6 +70,6 @@ fn main() {
         std::process::exit(exitcode::channel_resolve_error());
     });
 
-    let app = app::App::new(client, config, all_channels, team_id, team_name, time_window, poll_interval);
+    let app = app::App::new(client, config, all_channels, team_id, team_name, past, poll);
     app.run();
 }

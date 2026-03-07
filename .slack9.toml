@@ -1,2 +1,2 @@
-time_window = "24h"
-poll_interval = "10s"
+past = "24h"
+poll = "10s"

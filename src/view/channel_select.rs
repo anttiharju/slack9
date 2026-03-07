@@ -16,7 +16,7 @@ pub fn render(
     list_state: &mut ListState,
     poll_label: &str,
     workspace_label: &str,
-    time_window_label: &str,
+    past_label: &str,
 ) {
     let has_overlay = command_buf.is_some();
 
@@ -25,15 +25,7 @@ pub fn render(
         .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Min(1)])
         .split(area);
 
-    header::render(
-        frame,
-        outer[0],
-        None,
-        None,
-        Some(poll_label),
-        Some(workspace_label),
-        Some(time_window_label),
-    );
+    header::render(frame, outer[0], None, None, Some(poll_label), Some(workspace_label), Some(past_label));
     let content_area = outer[1];
 
     let chunks = if has_overlay {

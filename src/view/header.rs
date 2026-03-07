@@ -28,11 +28,11 @@ fn wave_level_at(d: usize) -> usize {
 pub fn render(
     frame: &mut Frame,
     area: Rect,
-    poll_interval: Option<Duration>,
+    poll: Option<Duration>,
     poll_elapsed: Option<Duration>,
     poll_label: Option<&str>,
     workspace_label: Option<&str>,
-    time_window_label: Option<&str>,
+    past_label: Option<&str>,
 ) {
     let logo_width = SMALL_LOGO.lines().map(|l| l.len()).max().unwrap_or(0) as u16;
     let lines: Vec<Line> = SMALL_LOGO
@@ -76,7 +76,7 @@ pub fn render(
     }
 
     // Time window label on third line
-    if let Some(tw) = time_window_label {
+    if let Some(tw) = past_label {
         let mut spans = vec![Span::styled(
             "Past ",
             Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
@@ -93,7 +93,7 @@ pub fn render(
     }
 
     // Poll progress bar under the logo, same width
-    if let Some(interval) = poll_interval {
+    if let Some(interval) = poll {
         let bar_width = logo_width as usize;
         let bar_y = area.y + 5;
         if bar_y >= area.bottom() {

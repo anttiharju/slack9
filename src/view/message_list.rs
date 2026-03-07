@@ -20,7 +20,7 @@ pub fn render(
     tracked_channels: &[(String, String)],
     config: &Config,
     list_state: &mut ListState,
-    poll_interval: Duration,
+    poll: Duration,
     poll_elapsed: Option<Duration>,
     team_name: &str,
 ) {
@@ -34,11 +34,11 @@ pub fn render(
     header::render(
         frame,
         outer[0],
-        Some(poll_interval),
+        Some(poll),
         poll_elapsed,
-        Some(&config.poll_interval_label()),
+        Some(&config.poll_label()),
         Some(team_name),
-        Some(&config.time_window_label()),
+        Some(&config.past_label()),
     );
     let content_area = outer[1];
 
@@ -78,10 +78,7 @@ pub fn render(
         .collect::<Vec<_>>()
         .join(", ");
 
-    let title = format!(
-        " slack9 \u{2014} {} (every {}, {} window) ",
-        channel_list, config.poll_interval, config.time_window,
-    );
+    let title = format!(" slack9 \u{2014} {} (every {}, {} window) ", channel_list, config.poll, config.past,);
 
     let list_border_color = if has_overlay { Color::Blue } else { Color::Cyan };
     let list = List::new(items)
