@@ -43,6 +43,10 @@ export SLACK9_XOXD=xoxd-baz
 2. `direnv allow`
 3. `slack9`
 
+### Revoke tokens
+
+Simply log out from the browser session from where you extracted the tokens.
+
 ## Troubleshooting
 
 ### API logs
