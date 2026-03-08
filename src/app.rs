@@ -187,7 +187,7 @@ impl App {
         MessageSource::Search(vec![format!("<@{}>", self.user_id)])
     }
 
-    /// Resolve search handles (users and user groups) into `<@USER_ID>` queries.
+    /// Resolve search handles (users and user groups) into search queries.
     fn resolve_search_handles(&self, input: &str) -> Vec<String> {
         let mut queries = Vec::new();
         for h in input.split_whitespace() {
@@ -200,13 +200,8 @@ impl App {
                 continue;
             }
             // Try user group
-            if let Some(member_ids) = self.client.find_usergroup_member_ids(h) {
-                for id in member_ids {
-                    let q = format!("<@{}>", id);
-                    if !queries.contains(&q) {
-                        queries.push(q);
-                    }
-                }
+            if let Some(group_id) = self.client.find_usergroup_id(h) {
+                queries.push(format!("<!subteam^{}>", group_id));
             }
         }
         queries
@@ -219,7 +214,7 @@ impl App {
             let h = h.trim_start_matches('@');
             if let Some(name) = self.client.find_user_display_name(h) {
                 names.push(name);
-            } else if self.client.find_usergroup_member_ids(h).is_some() {
+            } else if self.client.find_usergroup_id(h).is_some() {
                 names.push(h.to_string());
             }
         }
