@@ -89,7 +89,11 @@ impl App {
     }
 
     pub fn run(mut self) {
-        self.user_names = self.client.user_names();
+        let mut names = self.client.user_names();
+        names.extend(self.client.usergroup_handles());
+        names.sort();
+        names.dedup();
+        self.user_names = names;
 
         // Show splash screen for 1 second
         let splash_start = Instant::now();
@@ -170,15 +174,7 @@ impl App {
     fn resolve_initial_source(&mut self) -> MessageSource {
         if let Some(view) = self.config.state.view.clone() {
             if let Some(rest) = view.strip_prefix("search ") {
-                let queries: Vec<String> = rest
-                    .split_whitespace()
-                    .filter_map(|h| {
-                        let h = h.trim_start_matches('@');
-                        self.client.find_user_display_name(h)
-                    })
-                    .filter_map(|name| self.client.find_user_id(&name))
-                    .map(|id| format!("<@{}>", id))
-                    .collect();
+                let queries = self.resolve_search_handles(rest);
                 if !queries.is_empty() {
                     return MessageSource::Search(queries);
                 }
@@ -189,6 +185,45 @@ impl App {
             }
         }
         MessageSource::Search(vec![format!("<@{}>", self.user_id)])
+    }
+
+    /// Resolve search handles (users and user groups) into `<@USER_ID>` queries.
+    fn resolve_search_handles(&self, input: &str) -> Vec<String> {
+        let mut queries = Vec::new();
+        for h in input.split_whitespace() {
+            let h = h.trim_start_matches('@');
+            // Try user first
+            if let Some(name) = self.client.find_user_display_name(h)
+                && let Some(id) = self.client.find_user_id(&name)
+            {
+                queries.push(format!("<@{}>", id));
+                continue;
+            }
+            // Try user group
+            if let Some(member_ids) = self.client.find_usergroup_member_ids(h) {
+                for id in member_ids {
+                    let q = format!("<@{}>", id);
+                    if !queries.contains(&q) {
+                        queries.push(q);
+                    }
+                }
+            }
+        }
+        queries
+    }
+
+    /// Collect the display-name / group-handle tokens for saving to config.
+    fn resolve_search_save_names(&self, input: &str) -> Vec<String> {
+        let mut names = Vec::new();
+        for h in input.split_whitespace() {
+            let h = h.trim_start_matches('@');
+            if let Some(name) = self.client.find_user_display_name(h) {
+                names.push(name);
+            } else if self.client.find_usergroup_member_ids(h).is_some() {
+                names.push(h.to_string());
+            }
+        }
+        names
     }
 
     fn active_show_emojis(&self) -> Vec<String> {
@@ -285,22 +320,10 @@ impl App {
                                 handled = true;
                             }
                             if let Some(rest) = cmd.strip_prefix("search ") {
-                                let handles: Vec<String> = rest
-                                    .split_whitespace()
-                                    .filter_map(|h| {
-                                        let h = h.trim_start_matches('@');
-                                        self.client.find_user_display_name(h)
-                                    })
-                                    .collect();
-                                if !handles.is_empty() {
-                                    let search_queries: Vec<String> = handles
-                                        .iter()
-                                        .map(|name| match self.client.find_user_id(name) {
-                                            Some(id) => format!("<@{}>", id),
-                                            None => format!("@{}", name),
-                                        })
-                                        .collect();
-                                    self.save_view(&format!("search {}", handles.join(" ")));
+                                let search_queries = self.resolve_search_handles(rest);
+                                if !search_queries.is_empty() {
+                                    let save_names = self.resolve_search_save_names(rest);
+                                    self.save_view(&format!("search {}", save_names.join(" ")));
                                     source = MessageSource::Search(search_queries);
                                     messages.clear();
                                     seen.clear();
