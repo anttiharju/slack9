@@ -194,10 +194,11 @@ impl App {
             let h = h.trim_start_matches('@');
             // Try user first
             if let Some(name) = self.client.find_user_display_name(h)
-                && let Some(id) = self.client.find_user_id(&name) {
-                    queries.push(format!("<@{}>", id));
-                    continue;
-                }
+                && let Some(id) = self.client.find_user_id(&name)
+            {
+                queries.push(format!("<@{}>", id));
+                continue;
+            }
             // Try user group
             if let Some(member_ids) = self.client.find_usergroup_member_ids(h) {
                 for id in member_ids {
