@@ -10,7 +10,7 @@ mod view;
 use std::env;
 
 fn main() {
-    cli::parse_args();
+    let debug = cli::parse_args();
 
     let config = config::load();
 
@@ -39,7 +39,7 @@ fn main() {
         std::process::exit(exitcode::missing_xoxc());
     });
 
-    let mut client = slack::SlackClient::new(workspace_url, xoxd, xoxc);
+    let mut client = slack::SlackClient::new(workspace_url, xoxd, xoxc, debug);
 
     let (team_id, team_name, user_id) = match client.auth_test() {
         Ok(response) if response.ok => {

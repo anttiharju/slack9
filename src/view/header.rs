@@ -14,7 +14,7 @@ const BLOCKS: &[char] = &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'
 
 // Phase boundaries (fractions of the cycle)
 const WAVE_END: f64 = 0.50; // 50% wave
-const EXPLOSION_END: f64 = 0.54; // 4% all-filled
+pub const EXPLOSION_END: f64 = 0.54; // 4% all-filled
 const DRAIN_END: f64 = 0.85; // 31% drain
 // hold: 15% all-▁
 
@@ -30,6 +30,7 @@ pub fn render(
     area: Rect,
     poll: Option<Duration>,
     poll_elapsed: Option<Duration>,
+    poll_in_flight: bool,
     config_labels: &[(&str, String)],
     workspace_label: Option<&str>,
 ) {
@@ -92,7 +93,13 @@ pub fn render(
 
         let cycle_secs = interval.as_secs_f64().max(1.0);
         let elapsed_secs = poll_elapsed.map_or(0.0, |e| e.as_secs_f64());
-        let progress = (elapsed_secs / cycle_secs).min(1.0);
+        let raw_progress = (elapsed_secs / cycle_secs).min(1.0);
+        // Freeze at explosion while the background fetch is still running
+        let progress = if poll_in_flight && raw_progress >= WAVE_END {
+            WAVE_END
+        } else {
+            raw_progress
+        };
 
         let mut bar = String::with_capacity(bar_width * 4);
 
