@@ -3,6 +3,7 @@ use crate::input;
 use crate::model::TrackedMessage;
 use crate::slack::SlackClient;
 use crate::view;
+use crate::view::header::wave_fraction;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode};
@@ -437,8 +438,10 @@ impl App {
                 }
             }
 
-            // Spawn background poll at the end of the wave (full interval elapsed)
-            if !poll_in_flight && !poll_fired_this_cycle && last_poll.is_none_or(|t| t.elapsed() >= self.poll) {
+            // Spawn background poll at the end of the wave phase
+            let wf = wave_fraction();
+            let wave_secs = self.poll.as_secs_f64() * wf;
+            if !poll_in_flight && !poll_fired_this_cycle && last_poll.is_none_or(|t| t.elapsed().as_secs_f64() >= wave_secs) {
                 poll_in_flight = true;
                 poll_fired_this_cycle = true;
                 let client = Arc::clone(&self.client);
@@ -452,11 +455,17 @@ impl App {
                 });
             }
 
-            // Reset animation cycle (only when not waiting for a fetch)
-            if !poll_in_flight && last_poll.is_none_or(|t| t.elapsed() >= self.poll) {
+            // Reset animation cycle after drain completes
+            let drain_secs = self.poll.as_secs_f64() * (1.0 - wf);
+            if let Some(ds) = drain_start {
+                if ds.elapsed().as_secs_f64() >= drain_secs {
+                    last_poll = Some(Instant::now());
+                    poll_fired_this_cycle = false;
+                    drain_start = None;
+                }
+            } else if !poll_in_flight && last_poll.is_none() {
+                // Initial cycle start
                 last_poll = Some(Instant::now());
-                poll_fired_this_cycle = false;
-                drain_start = None;
             }
 
             if list_state.selected().is_none() && visible_count > 0 {

@@ -14,6 +14,16 @@ const BLOCKS: &[char] = &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'
 
 const TAIL_LEN: f64 = 7.0;
 
+/// Fraction of the poll interval used by the wave phase (the rest is drain).
+/// Computed from the logo width which determines num_cells.
+pub fn wave_fraction() -> f64 {
+    let logo_width = SMALL_LOGO.lines().map(|l| l.len()).max().unwrap_or(0);
+    let num_cells = logo_width.div_ceil(2);
+    let wave_steps = (num_cells - 1) as f64 + TAIL_LEN;
+    let total_steps = wave_steps + TAIL_LEN;
+    wave_steps / total_steps
+}
+
 /// Wave tail: for a cell at integer distance `d` behind the peak returns block level 0–7.
 ///
 /// Each step drops by one level: █ ▇ ▆ ▅ ▄ ▃ ▂ ▁
@@ -88,15 +98,18 @@ pub fn render(
         let bar_area = Rect::new(bar_x, bar_y, logo_width, 1);
         let num_cells = bar_width.div_ceil(2); // each cell = block + space
 
-        // Wave peak travels (num_cells - 1 + TAIL_LEN) positions over the poll interval.
-        // Each position takes step_secs. Drain descends 7 levels at the same rate.
+        // Total animation = wave + drain, both at the same step rate, fitting in `poll`.
+        // Wave: peak travels (num_cells - 1 + TAIL_LEN) steps.
+        // Drain: descends TAIL_LEN (7) steps.
         let cycle_secs = interval.as_secs_f64().max(1.0);
-        let total_wave_steps = (num_cells - 1) as f64 + TAIL_LEN;
-        let step_secs = cycle_secs / total_wave_steps;
-        let drain_duration_secs = 7.0 * step_secs;
+        let wave_steps = (num_cells - 1) as f64 + TAIL_LEN;
+        let total_steps = wave_steps + TAIL_LEN;
+        let wave_fraction = wave_steps / total_steps;
+        let wave_duration_secs = cycle_secs * wave_fraction;
+        let drain_duration_secs = cycle_secs * (1.0 - wave_fraction);
 
         let elapsed_secs = poll_elapsed.map_or(0.0, |e| e.as_secs_f64());
-        let wave_progress = (elapsed_secs / cycle_secs).clamp(0.0, 1.0);
+        let wave_progress = (elapsed_secs / wave_duration_secs).clamp(0.0, 1.0);
 
         let mut bar = String::with_capacity(bar_width * 4);
 
