@@ -8,6 +8,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding};
 use std::time::Duration;
 
 use super::{command_bar, header};
+use crate::cli;
 
 #[allow(clippy::too_many_arguments)]
 pub fn render(
@@ -42,9 +43,10 @@ pub fn render(
     );
 
     // Commands hint line
+    let cmd_names: String = cli::tui_command_names().iter().map(|n| format!(":{}", n)).collect::<Vec<_>>().join(" ");
     let commands_line = Line::from(vec![
         Span::styled("commands", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
-        Span::styled(" :poll :past :search", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Span::styled(format!(" {}", cmd_names), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
     ]);
     frame.render_widget(ratatui::widgets::Paragraph::new(commands_line), outer[1]);
 
