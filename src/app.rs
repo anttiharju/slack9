@@ -446,7 +446,8 @@ impl App {
                                     })
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
-                                    let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
+                                    let link_ts = msg.thread_ts.as_deref().unwrap_or(&msg.ts);
+                                    let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, link_ts);
                                     let _ = std::process::Command::new("open").arg(&url).spawn();
                                 }
                             }
@@ -614,6 +615,7 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
                             channel_id: channel_id.clone(),
                             channel_name: channel_name.clone(),
                             ts: msg.ts.clone(),
+                            thread_ts: msg.thread_ts.clone(),
                             display_name,
                             text,
                             reaction_emojis,
@@ -627,11 +629,16 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
             let mut all_matches = Vec::new();
             let mut seen_ts = std::collections::HashSet::new();
             for query in queries {
+                let mention_prefix = query.trim_end_matches('>');
                 if let Ok(resp) = client.search_messages(query)
                     && let Some(search_msgs) = resp.messages
                     && let Some(matches) = search_msgs.matches
                 {
                     for m in matches {
+                        let raw = m.text.as_deref().unwrap_or("");
+                        if !raw.contains(mention_prefix) {
+                            continue;
+                        }
                         let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
                         if msg_ts >= oldest && seen_ts.insert(m.ts.clone()) {
                             all_matches.push(m);
@@ -656,10 +663,17 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
                 let raw_text = m.text.as_deref().unwrap_or("").to_string();
                 let text = resolve_mentions(client, &raw_text);
 
+                let thread_ts = m.permalink.as_deref().and_then(|p| {
+                    p.split('?')
+                        .nth(1)
+                        .and_then(|qs| qs.split('&').find_map(|param| param.strip_prefix("thread_ts=").map(String::from)))
+                });
+
                 results.push(TrackedMessage {
                     channel_id,
                     channel_name,
                     ts: m.ts.clone(),
+                    thread_ts,
                     display_name,
                     text,
                     reaction_emojis,

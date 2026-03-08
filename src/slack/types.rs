@@ -71,6 +71,7 @@ pub struct ConversationsHistoryResponse {
 #[allow(dead_code)]
 pub struct Message {
     pub ts: String,
+    pub thread_ts: Option<String>,
     pub user: Option<String>,
     pub text: Option<String>,
     #[serde(rename = "type")]
@@ -109,6 +110,7 @@ pub struct SearchMatch {
     pub ts: String,
     pub text: Option<String>,
     pub user: Option<String>,
+    pub permalink: Option<String>,
     pub channel: Option<SearchChannel>,
     #[serde(default)]
     pub reactions: Vec<Reaction>,
