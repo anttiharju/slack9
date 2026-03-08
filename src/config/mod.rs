@@ -134,8 +134,9 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
         "m" => Ok(Duration::from_secs(value * 60)),
         "h" => Ok(Duration::from_secs(value * 3600)),
         "d" => Ok(Duration::from_secs(value * 86400)),
-        "ms" => Ok(Duration::from_millis(value)),
-        _ => Err(format!("unknown duration unit '{}' in '{}'. Use s, m, h, d, or ms", unit, s)),
+        "w" => Ok(Duration::from_secs(value * 7 * 86400)),
+        "M" => Ok(Duration::from_secs(value * 30 * 86400)),
+        _ => Err(format!("unknown duration unit '{}' in '{}'. Use s, m, h, d, w, or M", unit, s)),
     }
 }
 
