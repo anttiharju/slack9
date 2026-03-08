@@ -1,6 +1,6 @@
 # slack9
 
-`slack9` is a template for my Rust projects to make it easier to start new ones.
+Tracking various requests across Slack is a massive pain. This TUI helps you find and track them better.
 
 ## How to acquire xoxd and xoxc tokens
 
