@@ -20,7 +20,7 @@ and you have it copied in your clipboard.
 
 ### xoxd
 
-Dev Tools -> Storage -> Cookies -> d.
+Dev Tools -> Application / Storage -> Cookies -> d.
 
 This one you need to do manually.
 
