@@ -1,3 +1,4 @@
+use super::api_log::ApiLog;
 use super::types::*;
 use reqwest::blocking::Client;
 use reqwest::header::{CONTENT_TYPE, COOKIE};
@@ -10,16 +11,19 @@ pub struct SlackClient {
     xoxd: String,
     xoxc: String,
     users: HashMap<String, String>,
+    api_log: ApiLog,
 }
 
 impl SlackClient {
     pub fn new(workspace_url: String, xoxd: String, xoxc: String) -> Self {
+        let api_log = ApiLog::new().expect("failed to initialize API log");
         Self {
             client: Client::new(),
             workspace_url: workspace_url.trim_end_matches('/').to_string(),
             xoxd,
             xoxc,
             users: HashMap::new(),
+            api_log,
         }
     }
 
@@ -70,6 +74,7 @@ impl SlackClient {
         let mut cursor = String::new();
 
         loop {
+            self.api_log.log("users.list");
             let url = format!("{}/api/users.list", self.workspace_url);
 
             let mut body = format!("token={}&limit=1000", self.xoxc);
@@ -117,6 +122,7 @@ impl SlackClient {
     }
 
     pub fn auth_test(&self) -> Result<AuthTestResponse, String> {
+        self.api_log.log("auth.test");
         let url = format!("{}/api/auth.test", self.workspace_url);
 
         let response = self
@@ -146,6 +152,7 @@ impl SlackClient {
         let mut cursor = String::new();
 
         loop {
+            self.api_log.log("conversations.list");
             let url = format!("{}/api/conversations.list", self.workspace_url);
 
             let mut body = format!("token={}&types=public_channel,private_channel&limit=1000", self.xoxc);
@@ -187,6 +194,7 @@ impl SlackClient {
     }
 
     pub fn conversations_history(&self, channel: &str, time_window: Duration) -> Result<ConversationsHistoryResponse, String> {
+        self.api_log.log("conversations.history");
         let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - time_window.as_secs_f64();
 
         let url = format!("{}/api/conversations.history", self.workspace_url);
@@ -216,6 +224,7 @@ impl SlackClient {
 
     /// Search messages across all channels.
     pub fn search_messages(&self, query: &str) -> Result<SearchMessagesResponse, String> {
+        self.api_log.log("search.messages");
         let url = format!("{}/api/search.messages", self.workspace_url);
 
         let response = self
@@ -234,6 +243,7 @@ impl SlackClient {
 
     /// Fetch reactions for a specific message.
     pub fn reactions_get(&self, channel: &str, timestamp: &str) -> Result<ReactionsGetResponse, String> {
+        self.api_log.log("reactions.get");
         let url = format!("{}/api/reactions.get", self.workspace_url);
 
         let response = self
