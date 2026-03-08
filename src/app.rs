@@ -629,16 +629,11 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
             let mut all_matches = Vec::new();
             let mut seen_ts = std::collections::HashSet::new();
             for query in queries {
-                let mention_prefix = query.trim_end_matches('>');
                 if let Ok(resp) = client.search_messages(query)
                     && let Some(search_msgs) = resp.messages
                     && let Some(matches) = search_msgs.matches
                 {
                     for m in matches {
-                        let raw = m.text.as_deref().unwrap_or("");
-                        if !raw.contains(mention_prefix) {
-                            continue;
-                        }
                         let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
                         if msg_ts >= oldest && seen_ts.insert(m.ts.clone()) {
                             all_matches.push(m);
