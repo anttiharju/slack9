@@ -20,6 +20,8 @@ pub enum TuiCommand {
     Search { query: Vec<String> },
     /// Switch to a channel
     Channel { name: Option<String> },
+    /// Define a reaction filter
+    Reaction { name: String, emoji: String },
     /// Quit the application
     Quit,
 }

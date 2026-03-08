@@ -38,6 +38,7 @@ pub struct App {
     command_buf: Option<String>,
     past: Duration,
     poll: Duration,
+    active_reactions: HashSet<String>,
 }
 
 impl Drop for App {
@@ -72,6 +73,8 @@ impl App {
             original_hook(panic);
         }));
 
+        let active_reactions = config.reactions.keys().cloned().collect();
+
         Self {
             client: Arc::new(client),
             config,
@@ -84,6 +87,7 @@ impl App {
             command_buf: None,
             past,
             poll,
+            active_reactions,
         }
     }
 
@@ -150,8 +154,22 @@ impl App {
         }
     }
 
+    fn active_show_emojis(&self) -> Vec<String> {
+        let active = &self.active_reactions;
+        self.config
+            .reactions
+            .iter()
+            .filter(|(name, _)| active.contains(*name))
+            .map(|(_, emoji)| emoji.clone())
+            .collect()
+    }
+
+    fn all_configured_emojis(&self) -> Vec<String> {
+        self.config.reactions.values().cloned().collect()
+    }
+
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
-        let (new_msgs, _) = fetch_messages(&self.client, source, self.past, &seen.keys().cloned().collect(), &self.config.header.hide);
+        let new_msgs = fetch_messages(&self.client, source, self.past, &seen.keys().cloned().collect());
         for msg in new_msgs {
             if !seen.contains_key(&msg.ts) {
                 seen.insert(msg.ts.clone(), messages.len());
@@ -166,8 +184,7 @@ impl App {
         let mut last_poll: Option<Instant>;
         let mut list_state = ListState::default();
         let mut pending_g: Option<char> = None;
-        let mut count_buf: u32 = 0;
-        let (tx, rx) = mpsc::channel::<(u64, Vec<TrackedMessage>, Vec<String>)>();
+        let (tx, rx) = mpsc::channel::<(u64, Vec<TrackedMessage>)>();
         let mut poll_generation: u64 = 0;
         let mut poll_in_flight = false;
 
@@ -176,7 +193,16 @@ impl App {
         last_poll = Some(Instant::now());
 
         loop {
-            let visible_count = messages.len();
+            // Client-side filtering: show messages that have no configured reaction or at least one active reaction
+            let show_emojis = self.active_show_emojis();
+            let all_emojis = self.all_configured_emojis();
+            let visible_count = messages
+                .iter()
+                .filter(|m| {
+                    let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
+                    configured.is_empty() || configured.iter().any(|e| show_emojis.contains(e))
+                })
+                .count();
 
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
                 && let Ok(Event::Key(key)) = event::read()
@@ -191,6 +217,13 @@ impl App {
                                 return TrackResult::Quit;
                             }
                             self.handle_config_command(&cmd);
+                            if let Some(rest) = cmd.strip_prefix("reaction ") {
+                                let mut parts = rest.split_whitespace();
+                                if let (Some(name), Some(emoji)) = (parts.next(), parts.next()) {
+                                    self.config.reactions.insert(name.to_string(), emoji.to_string());
+                                    let _ = config::save(&self.config);
+                                }
+                            }
                             let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
                             if let Some(name) = channel_arg
                                 && let Some(ch) = self.find_channel(name)
@@ -248,42 +281,39 @@ impl App {
                     }
                 } else {
                     match key.code {
-                        KeyCode::Char(c @ '0'..='9') => {
-                            if count_buf > 0 || c != '0' {
-                                count_buf = count_buf.saturating_mul(10).saturating_add(c as u32 - '0' as u32);
+                        KeyCode::Char(c @ '1'..='9') => {
+                            pending_g = None;
+                            let idx = (c as u32 - '1' as u32) as usize;
+                            let reaction_names: Vec<String> = self.config.reactions.keys().cloned().collect();
+                            if idx < reaction_names.len() {
+                                let name = &reaction_names[idx];
+                                if self.active_reactions.contains(name) {
+                                    self.active_reactions.remove(name);
+                                } else {
+                                    self.active_reactions.insert(name.clone());
+                                }
                             }
                         }
                         KeyCode::Char(':') => {
                             pending_g = None;
-                            count_buf = 0;
                             self.command_buf = Some(String::new());
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
                             pending_g = None;
-                            let repeat = if count_buf == 0 { 1 } else { count_buf as usize };
-                            count_buf = 0;
                             if visible_count > 0 {
                                 let current = list_state.selected().unwrap_or(0);
-                                let i = if repeat >= visible_count { 0 } else { current.saturating_sub(repeat) };
-                                list_state.select(Some(i));
+                                list_state.select(Some(current.saturating_sub(1)));
                             }
                         }
                         KeyCode::Down | KeyCode::Char('j') => {
                             pending_g = None;
-                            let repeat = if count_buf == 0 { 1 } else { count_buf as usize };
-                            count_buf = 0;
                             if visible_count > 0 {
                                 let current = list_state.selected().unwrap_or(0);
-                                let i = if current + repeat >= visible_count {
-                                    visible_count - 1
-                                } else {
-                                    current + repeat
-                                };
+                                let i = if current + 1 >= visible_count { visible_count - 1 } else { current + 1 };
                                 list_state.select(Some(i));
                             }
                         }
                         KeyCode::Char('g') => {
-                            count_buf = 0;
                             if pending_g == Some('g') {
                                 if visible_count > 0 {
                                     list_state.select(Some(0));
@@ -294,7 +324,6 @@ impl App {
                             }
                         }
                         KeyCode::Char('G') => {
-                            count_buf = 0;
                             if pending_g == Some('G') {
                                 if visible_count > 0 {
                                     list_state.select(Some(visible_count - 1));
@@ -306,12 +335,18 @@ impl App {
                         }
                         KeyCode::Enter => {
                             pending_g = None;
-                            count_buf = 0;
-                            if let Some(selected) = list_state.selected()
-                                && let Some(msg) = messages.get(selected)
-                            {
-                                let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
-                                let _ = std::process::Command::new("open").arg(&url).spawn();
+                            if let Some(selected) = list_state.selected() {
+                                let visible: Vec<&TrackedMessage> = messages
+                                    .iter()
+                                    .filter(|m| {
+                                        let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
+                                        configured.is_empty() || configured.iter().any(|e| show_emojis.contains(e))
+                                    })
+                                    .collect();
+                                if let Some(msg) = visible.get(selected) {
+                                    let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
+                                    let _ = std::process::Command::new("open").arg(&url).spawn();
+                                }
                             }
                         }
                         KeyCode::Esc => {
@@ -319,28 +354,19 @@ impl App {
                         }
                         _ => {
                             pending_g = None;
-                            count_buf = 0;
                         }
                     }
                 }
             }
 
             // Receive results from background poll
-            if let Ok((generation, new_msgs, hide_ts)) = rx.try_recv() {
+            if let Ok((generation, new_msgs)) = rx.try_recv() {
                 poll_in_flight = false;
                 if generation == poll_generation {
-                    // Remove messages that now have hidden reactions
-                    if !hide_ts.is_empty() {
-                        messages.retain(|m| !hide_ts.contains(&m.ts));
-                        seen.clear();
-                        for (i, m) in messages.iter().enumerate() {
-                            seen.insert(m.ts.clone(), i);
-                        }
-                        // Fix selection if it's now out of bounds
-                        if let Some(sel) = list_state.selected()
-                            && sel >= messages.len()
-                        {
-                            list_state.select(if messages.is_empty() { None } else { Some(messages.len() - 1) });
+                    // Update reactions on existing messages
+                    for msg in &new_msgs {
+                        if let Some(&idx) = seen.get(&msg.ts) {
+                            messages[idx].reaction_emojis = msg.reaction_emojis.clone();
                         }
                     }
                     for msg in new_msgs {
@@ -361,17 +387,33 @@ impl App {
                 let past = self.past;
                 let seen_keys: HashSet<String> = seen.keys().cloned().collect();
                 let generation = poll_generation;
-                let hide = self.config.header.hide.clone();
                 let tx = tx.clone();
                 std::thread::spawn(move || {
-                    let (results, hide_ts) = fetch_messages(&client, &source_clone, past, &seen_keys, &hide);
-                    let _ = tx.send((generation, results, hide_ts));
+                    let results = fetch_messages(&client, &source_clone, past, &seen_keys);
+                    let _ = tx.send((generation, results));
                 });
             }
 
-            if list_state.selected().is_none() && !messages.is_empty() {
+            if list_state.selected().is_none() && visible_count > 0 {
                 list_state.select(Some(0));
             }
+            // Clamp selection to visible range
+            if let Some(sel) = list_state.selected() {
+                if visible_count == 0 {
+                    list_state.select(None);
+                } else if sel >= visible_count {
+                    list_state.select(Some(visible_count - 1));
+                }
+            }
+
+            // Build filtered visible messages for rendering
+            let visible_messages: Vec<&TrackedMessage> = messages
+                .iter()
+                .filter(|m| {
+                    let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
+                    configured.is_empty() || configured.iter().any(|e| show_emojis.contains(e))
+                })
+                .collect();
 
             let command_buf_snapshot = self.command_buf.clone();
             let all_channels = &self.all_channels;
@@ -384,6 +426,7 @@ impl App {
                 MessageSource::Channels(channels) => channels,
                 MessageSource::Search(_) => &[],
             };
+            let active_reactions = &self.active_reactions;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -393,13 +436,14 @@ impl App {
                         command_buf_snapshot.as_deref(),
                         all_channels,
                         user_names,
-                        &messages,
+                        &visible_messages,
                         tracked_channels,
                         config,
                         &mut list_state,
                         pi,
                         pe,
                         team_name,
+                        active_reactions,
                     );
                 })
                 .expect("failed to draw");
@@ -421,22 +465,8 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
     result
 }
 
-fn has_hidden_reaction(reactions: &[crate::slack::Reaction], hide: &[String]) -> bool {
-    if hide.is_empty() {
-        return false;
-    }
-    reactions.iter().any(|r| hide.iter().any(|h| h == &r.name))
-}
-
-fn fetch_messages(
-    client: &SlackClient,
-    source: &MessageSource,
-    past: Duration,
-    seen_keys: &HashSet<String>,
-    hide: &[String],
-) -> (Vec<TrackedMessage>, Vec<String>) {
+fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, seen_keys: &HashSet<String>) -> Vec<TrackedMessage> {
     let mut results = Vec::new();
-    let mut hide_ts = Vec::new();
     match source {
         MessageSource::Channels(channels) => {
             for (channel_id, channel_name) in channels {
@@ -444,26 +474,32 @@ fn fetch_messages(
                     && let Some(msgs) = resp.messages
                 {
                     for msg in msgs.iter().rev() {
-                        let dominated = has_hidden_reaction(&msg.reactions, hide);
+                        let reaction_emojis: Vec<String> = msg.reactions.iter().map(|r| r.name.clone()).collect();
                         if seen_keys.contains(&msg.ts) {
-                            // Already shown — check if it should now be hidden
-                            if dominated {
-                                hide_ts.push(msg.ts.clone());
-                            }
-                        } else if !dominated {
-                            let user_id = msg.user.as_deref().unwrap_or("unknown");
-                            let display_name = client.resolve_user(user_id);
-                            let raw_text = msg.text.as_deref().unwrap_or("").to_string();
-                            let text = resolve_mentions(client, &raw_text);
-
+                            // Will be updated with new reactions in the caller
                             results.push(TrackedMessage {
                                 channel_id: channel_id.clone(),
                                 channel_name: channel_name.clone(),
                                 ts: msg.ts.clone(),
-                                display_name,
-                                text,
+                                display_name: String::new(),
+                                text: String::new(),
+                                reaction_emojis,
                             });
+                            continue;
                         }
+                        let user_id = msg.user.as_deref().unwrap_or("unknown");
+                        let display_name = client.resolve_user(user_id);
+                        let raw_text = msg.text.as_deref().unwrap_or("").to_string();
+                        let text = resolve_mentions(client, &raw_text);
+
+                        results.push(TrackedMessage {
+                            channel_id: channel_id.clone(),
+                            channel_name: channel_name.clone(),
+                            ts: msg.ts.clone(),
+                            display_name,
+                            text,
+                            reaction_emojis,
+                        });
                     }
                 }
             }
@@ -478,17 +514,22 @@ fn fetch_messages(
                         Some(ch) => (ch.id.clone(), ch.name.clone()),
                         None => ("unknown".to_string(), "unknown".to_string()),
                     };
-                    if !hide.is_empty()
-                        && let Ok(rr) = client.reactions_get(&channel_id, &m.ts)
+                    let reaction_emojis: Vec<String> = if let Ok(rr) = client.reactions_get(&channel_id, &m.ts)
                         && let Some(msg) = &rr.message
-                        && has_hidden_reaction(&msg.reactions, hide)
                     {
-                        if seen_keys.contains(&m.ts) {
-                            hide_ts.push(m.ts.clone());
-                        }
-                        continue;
-                    }
+                        msg.reactions.iter().map(|r| r.name.clone()).collect()
+                    } else {
+                        Vec::new()
+                    };
                     if seen_keys.contains(&m.ts) {
+                        results.push(TrackedMessage {
+                            channel_id,
+                            channel_name,
+                            ts: m.ts.clone(),
+                            display_name: String::new(),
+                            text: String::new(),
+                            reaction_emojis,
+                        });
                         continue;
                     }
                     let user_id_str = m.user.as_deref().unwrap_or("unknown");
@@ -502,10 +543,11 @@ fn fetch_messages(
                         ts: m.ts.clone(),
                         display_name,
                         text,
+                        reaction_emojis,
                     });
                 }
             }
         }
     }
-    (results, hide_ts)
+    results
 }

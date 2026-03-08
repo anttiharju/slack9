@@ -5,6 +5,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding};
+use std::collections::HashSet;
 use std::time::Duration;
 
 use super::{command_bar, header};
@@ -17,13 +18,14 @@ pub fn render(
     command_buf: Option<&str>,
     all_channels: &[(String, String)],
     user_names: &[String],
-    messages: &[TrackedMessage],
+    messages: &[&TrackedMessage],
     tracked_channels: &[(String, String)],
     config: &Config,
     list_state: &mut ListState,
     poll: Duration,
     poll_elapsed: Option<Duration>,
     team_name: &str,
+    active_reactions: &HashSet<String>,
 ) {
     let has_overlay = command_buf.is_some();
 
@@ -91,15 +93,33 @@ pub fn render(
 
     let title = format!(" {} ", view_label);
 
+    // Build bottom title for reaction toggles
+    let reaction_names: Vec<&String> = config.reactions.keys().collect();
+    let bottom_title = if reaction_names.is_empty() {
+        String::new()
+    } else {
+        let toggles: Vec<String> = reaction_names
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let check = if active_reactions.contains(*name) { "x" } else { " " };
+                format!("{}) {} [{}]", i + 1, name, check)
+            })
+            .collect();
+        format!(" show messages with reactions for: {} ", toggles.join(" "))
+    };
+
     let list_border_color = if has_overlay { Color::Blue } else { Color::Cyan };
+    let mut block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(list_border_color))
+        .padding(Padding::new(1, 1, 0, 0));
+    if !bottom_title.is_empty() {
+        block = block.title_bottom(bottom_title);
+    }
     let list = List::new(items)
-        .block(
-            Block::default()
-                .title(title)
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(list_border_color))
-                .padding(Padding::new(1, 1, 0, 0)),
-        )
+        .block(block)
         .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
         .highlight_symbol("> ");
 

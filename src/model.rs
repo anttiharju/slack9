@@ -4,4 +4,5 @@ pub struct TrackedMessage {
     pub ts: String,
     pub display_name: String,
     pub text: String,
+    pub reaction_emojis: Vec<String>,
 }

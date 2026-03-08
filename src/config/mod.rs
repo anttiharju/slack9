@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
@@ -11,6 +12,8 @@ const DEFAULT_POLL: &str = "10s";
 pub struct Config {
     #[serde(default, skip_serializing_if = "HeaderConfig::is_default")]
     pub header: HeaderConfig,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub reactions: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -19,8 +22,6 @@ pub struct HeaderConfig {
     pub past: String,
     #[serde(default = "default_poll", skip_serializing_if = "is_default_poll")]
     pub poll: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub hide: Vec<String>,
 }
 
 impl Default for HeaderConfig {
@@ -28,7 +29,6 @@ impl Default for HeaderConfig {
         Self {
             past: default_past(),
             poll: default_poll(),
-            hide: Vec::new(),
         }
     }
 }
@@ -51,7 +51,7 @@ fn is_default_poll(v: &str) -> bool {
 
 impl HeaderConfig {
     fn is_default(&self) -> bool {
-        self.past == DEFAULT_PAST && self.poll == DEFAULT_POLL && self.hide.is_empty()
+        self.past == DEFAULT_PAST && self.poll == DEFAULT_POLL
     }
 
     pub fn past_duration(&self) -> Result<Duration, String> {
@@ -90,8 +90,11 @@ impl fmt::Display for Config {
         writeln!(f, "  [header]")?;
         writeln!(f, "    past: {}", self.header.past)?;
         writeln!(f, "    poll: {}", self.header.poll)?;
-        if !self.header.hide.is_empty() {
-            write!(f, "    hide: {:?}", self.header.hide)?;
+        if !self.reactions.is_empty() {
+            writeln!(f, "  [reactions]")?;
+            for (name, emoji) in &self.reactions {
+                writeln!(f, "    {} = {}", name, emoji)?;
+            }
         }
         Ok(())
     }
