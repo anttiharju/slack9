@@ -454,9 +454,14 @@ impl App {
             }
 
             // Build filtered visible messages for rendering
+            let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - self.past.as_secs_f64();
             let visible_messages: Vec<&TrackedMessage> = messages
                 .iter()
                 .filter(|m| {
+                    let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
+                    if msg_ts < oldest {
+                        return false;
+                    }
                     let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
                     configured.is_empty() || configured.iter().any(|e| show_emojis.contains(e))
                 })
