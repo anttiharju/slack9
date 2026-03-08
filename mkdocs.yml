@@ -1,4 +1,4 @@
-site_name: rust-starter
+site_name: slack9
 theme:
   name: material
   features:

@@ -6,7 +6,7 @@ on:
     branches:
       - wildcard
     paths:
-      - ".cargo/zcc/**"
+      - ".cargo/zcc/**/*"
       - "flake.nix"
       - "flake.lock"
       - ".github/workflows/wildcard-flake.yml"

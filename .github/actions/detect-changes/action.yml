@@ -67,12 +67,6 @@ runs:
         array: ${{ inputs.changes }}
       run: |
         compare-changes --changes "$array" --wildcard src.yml
-    - id: action
-      shell: sh
-      env:
-        array: ${{ inputs.changes }}
-      run: |
-        compare-changes --changes "$array" --wildcard action.yml
 outputs:
   actionlint:
     description: "Whether actionlint has changed"
@@ -107,6 +101,3 @@ outputs:
   src:
     description: "Whether src has changed"
     value: ${{ steps.src.outputs.changed }}
-  action:
-    description: "Whether action has changed"
-    value: ${{ steps.action.outputs.changed }}

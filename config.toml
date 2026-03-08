@@ -1,0 +1,8 @@
+[header]
+past = "24h"
+poll = "10s"
+
+[reactions]
+wip = "eyes"
+blocked = "hourglass"
+completed = "white_check_mark"
