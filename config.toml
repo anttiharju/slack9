@@ -2,4 +2,7 @@
 past = "24h"
 poll = "10s"
 
-hide = ["white_check_mark"]
+[reactions]
+wip = "eyes"
+blocked = "hourglass"
+completed = "white_check_mark"
