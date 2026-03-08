@@ -86,7 +86,7 @@ impl HeaderConfig {
 
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Config (~/.slack9.toml):")?;
+        writeln!(f, "Config (~/.config/slack9/config.toml):")?;
         writeln!(f, "  [header]")?;
         writeln!(f, "    past: {}", self.header.past)?;
         writeln!(f, "    poll: {}", self.header.poll)?;
@@ -153,10 +153,13 @@ pub fn save(config: &Config) -> Result<(), String> {
         let _ = fs::remove_file(&path);
         return Ok(());
     }
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("failed to create config directory: {}", e))?;
+    }
     fs::write(&path, contents).map_err(|e| format!("failed to write {}: {}", path.display(), e))
 }
 
 fn config_path() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").map_err(|_| "Could not determine home directory".to_string())?;
-    Ok(PathBuf::from(home).join(".slack9.toml"))
+    Ok(PathBuf::from(home).join(".config/slack9/config.toml"))
 }
