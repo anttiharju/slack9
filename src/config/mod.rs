@@ -1,5 +1,5 @@
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
@@ -12,8 +12,8 @@ const DEFAULT_POLL: &str = "10s";
 pub struct Config {
     #[serde(default, skip_serializing_if = "HeaderConfig::is_default")]
     pub header: HeaderConfig,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub reactions: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
+    pub reactions: IndexMap<String, String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
