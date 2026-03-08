@@ -72,16 +72,17 @@ pub fn render(
         })
         .collect();
 
-    let channel_list: String = tracked_channels
-        .iter()
-        .map(|(_, name)| format!("#{}", name))
-        .collect::<Vec<_>>()
-        .join(", ");
+    let view_label = if tracked_channels.is_empty() {
+        "search".to_string()
+    } else {
+        tracked_channels
+            .iter()
+            .map(|(_, name)| format!("#{}", name))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
 
-    let title = format!(
-        " slack9 \u{2014} {} (every {}, {} window) ",
-        channel_list, config.header.poll, config.header.past,
-    );
+    let title = format!(" {} ", view_label);
 
     let list_border_color = if has_overlay { Color::Blue } else { Color::Cyan };
     let list = List::new(items)
