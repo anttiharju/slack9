@@ -6,7 +6,6 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding};
 use std::collections::HashSet;
-use std::time::Duration;
 
 use super::{command_bar, header};
 use crate::cli;
@@ -23,10 +22,7 @@ pub fn render(
     tracked_channels: &[(String, String)],
     config: &Config,
     list_state: &mut ListState,
-    poll: Duration,
-    poll_elapsed: Option<Duration>,
-    poll_in_flight: bool,
-    drain_elapsed: Option<Duration>,
+    poll: &header::PollState,
     team_name: &str,
     active_reactions: &HashSet<String>,
 ) {
@@ -37,16 +33,7 @@ pub fn render(
         .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Min(1)])
         .split(area);
 
-    header::render(
-        frame,
-        outer[0],
-        Some(poll),
-        poll_elapsed,
-        poll_in_flight,
-        drain_elapsed,
-        &config.header.config_labels(),
-        Some(team_name),
-    );
+    header::render(frame, outer[0], Some(poll), &config.header.config_labels(), Some(team_name));
 
     // Commands hint on the same row as the poll indicator (last row of header)
     let mut spans = vec![Span::styled(

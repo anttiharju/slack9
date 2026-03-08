@@ -499,10 +499,12 @@ impl App {
             let all_channels = &self.all_channels;
             let user_names = &self.user_names;
             let config = &self.config;
-            let pi = self.poll;
-            let pe = last_poll.map(|t| t.elapsed());
-            let pf = poll_in_flight;
-            let de = drain_start.map(|t| t.elapsed());
+            let poll_state = view::header::PollState {
+                interval: self.poll,
+                elapsed: last_poll.map(|t| t.elapsed()),
+                in_flight: poll_in_flight,
+                drain_elapsed: drain_start.map(|t| t.elapsed()),
+            };
             let team_name = &self.team_name;
             let tracked_channels: &[(String, String)] = match &source {
                 MessageSource::Channels(channels) => channels,
@@ -523,10 +525,7 @@ impl App {
                         tracked_channels,
                         config,
                         &mut list_state,
-                        pi,
-                        pe,
-                        pf,
-                        de,
+                        &poll_state,
                         team_name,
                         active_reactions,
                     );

@@ -31,16 +31,14 @@ fn wave_level_at(d: usize) -> usize {
     7_usize.saturating_sub(d)
 }
 
-pub fn render(
-    frame: &mut Frame,
-    area: Rect,
-    poll: Option<Duration>,
-    poll_elapsed: Option<Duration>,
-    poll_in_flight: bool,
-    drain_elapsed: Option<Duration>,
-    config_labels: &[(&str, String)],
-    workspace_label: Option<&str>,
-) {
+pub struct PollState {
+    pub interval: Duration,
+    pub elapsed: Option<Duration>,
+    pub in_flight: bool,
+    pub drain_elapsed: Option<Duration>,
+}
+
+pub fn render(frame: &mut Frame, area: Rect, poll: Option<&PollState>, config_labels: &[(&str, String)], workspace_label: Option<&str>) {
     let logo_width = SMALL_LOGO.lines().map(|l| l.len()).max().unwrap_or(0) as u16;
     let lines: Vec<Line> = SMALL_LOGO
         .lines()
@@ -89,7 +87,10 @@ pub fn render(
     }
 
     // Poll progress bar under the logo, same width
-    if let Some(interval) = poll {
+    if let Some(ps) = poll {
+        let interval = ps.interval;
+        let poll_in_flight = ps.in_flight;
+        let drain_elapsed = ps.drain_elapsed;
         let bar_width = logo_width as usize;
         let bar_y = area.y + 5;
         if bar_y >= area.bottom() {
@@ -108,7 +109,7 @@ pub fn render(
         let wave_duration_secs = cycle_secs * wave_fraction;
         let drain_duration_secs = cycle_secs * (1.0 - wave_fraction);
 
-        let elapsed_secs = poll_elapsed.map_or(0.0, |e| e.as_secs_f64());
+        let elapsed_secs = ps.elapsed.map_or(0.0, |e| e.as_secs_f64());
         let wave_progress = (elapsed_secs / wave_duration_secs).clamp(0.0, 1.0);
 
         let mut bar = String::with_capacity(bar_width * 4);
