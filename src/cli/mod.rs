@@ -6,7 +6,7 @@ use style::get_style;
 #[derive(Parser)]
 #[command(styles = get_style())]
 struct Cli {
-    /// Enable API usage logging to ~/.config/slack9/session-<epoch>.log
+    /// Enable API usage logging to ~/.config/slack9/debug<epoch>.log
     #[arg(long)]
     debug: bool,
 

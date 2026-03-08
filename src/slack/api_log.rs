@@ -14,7 +14,7 @@ impl ApiLog {
         fs::create_dir_all(&dir).map_err(|e| format!("failed to create log directory: {}", e))?;
 
         let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
-        let path = dir.join(format!("session-{}.log", epoch));
+        let path = dir.join(format!("debug{}.log", epoch));
 
         Ok(Self { path })
     }
