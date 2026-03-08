@@ -135,3 +135,20 @@ pub struct ReactionsGetMessage {
     #[serde(default)]
     pub reactions: Vec<Reaction>,
 }
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct UsergroupsListResponse {
+    pub ok: bool,
+    pub usergroups: Option<Vec<Usergroup>>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[allow(dead_code)]
+pub struct Usergroup {
+    pub id: String,
+    pub handle: String,
+    #[serde(default)]
+    pub users: Vec<String>,
+}
