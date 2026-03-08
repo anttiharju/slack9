@@ -16,6 +16,7 @@ pub fn render(
     frame: &mut Frame,
     area: Rect,
     command_buf: Option<&str>,
+    command_error: bool,
     all_channels: &[(String, String)],
     user_names: &[String],
     messages: &[&TrackedMessage],
@@ -75,7 +76,7 @@ pub fn render(
     let (overlay_area, list_area) = if has_overlay { (Some(chunks[0]), chunks[1]) } else { (None, chunks[0]) };
 
     if let Some(overlay_area) = overlay_area {
-        command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), all_channels, user_names);
+        command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), command_error, all_channels, user_names);
     }
 
     let items: Vec<ListItem> = messages

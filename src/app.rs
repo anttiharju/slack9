@@ -38,6 +38,7 @@ pub struct App {
     user_id: String,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
+    command_error: bool,
     past: Duration,
     poll: Duration,
     active_reactions: HashSet<String>,
@@ -87,6 +88,7 @@ impl App {
             user_id,
             terminal,
             command_buf: None,
+            command_error: false,
             past,
             poll,
             active_reactions,
@@ -244,16 +246,19 @@ impl App {
                     match key.code {
                         KeyCode::Enter => {
                             let cmd = buf.trim().to_string();
-                            self.command_buf = None;
+                            let mut handled = false;
                             if cmd == "q" || cmd == "q!" {
                                 return TrackResult::Quit;
                             }
-                            self.handle_config_command(&cmd);
+                            if self.handle_config_command(&cmd) {
+                                handled = true;
+                            }
                             if let Some(rest) = cmd.strip_prefix("reaction ") {
                                 let mut parts = rest.split_whitespace();
                                 if let (Some(name), Some(emoji)) = (parts.next(), parts.next()) {
                                     self.config.reactions.insert(name.to_string(), emoji.to_string());
                                     let _ = config::save(&self.config);
+                                    handled = true;
                                 }
                             }
                             let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
@@ -269,6 +274,7 @@ impl App {
                                 poll_generation += 1;
                                 poll_in_flight = false;
                                 poll_fired_this_cycle = false;
+                                handled = true;
                             }
                             if let Some(rest) = cmd.strip_prefix("search ") {
                                 let handles: Vec<String> = rest
@@ -295,17 +301,26 @@ impl App {
                                     poll_generation += 1;
                                     poll_in_flight = false;
                                     poll_fired_this_cycle = false;
+                                    handled = true;
                                 }
+                            }
+                            if handled {
+                                self.command_buf = None;
+                                self.command_error = false;
+                            } else {
+                                self.command_error = true;
                             }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
                             self.command_buf = None;
+                            self.command_error = false;
                         }
                         KeyCode::Backspace => {
                             buf.pop();
                             if buf.is_empty() {
                                 self.command_buf = None;
                             }
+                            self.command_error = false;
                         }
                         KeyCode::Char(c) => {
                             if c == ' ' && !buf.contains(' ') {
@@ -318,6 +333,7 @@ impl App {
                                 }
                             }
                             buf.push(c);
+                            self.command_error = false;
                         }
                         KeyCode::Tab => {
                             input::tab_complete_channel(buf, &self.all_channels, &self.user_names);
@@ -468,6 +484,7 @@ impl App {
                 .collect();
 
             let command_buf_snapshot = self.command_buf.clone();
+            let command_error = self.command_error;
             let all_channels = &self.all_channels;
             let user_names = &self.user_names;
             let config = &self.config;
@@ -487,6 +504,7 @@ impl App {
                         frame,
                         area,
                         command_buf_snapshot.as_deref(),
+                        command_error,
                         all_channels,
                         user_names,
                         &visible_messages,
