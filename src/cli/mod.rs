@@ -15,7 +15,7 @@ pub enum TuiCommand {
     /// Set the poll interval
     Poll { value: Option<String> },
     /// Set the past duration
-    Past { value: Option<String> },
+    Time { value: Option<String> },
     /// Search for messages by user
     Search { query: Vec<String> },
     /// Switch to a channel

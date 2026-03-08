@@ -120,10 +120,10 @@ impl App {
             .cloned()
     }
 
-    /// Handle `:past <val>` and `:poll <val>` commands.
+    /// Handle `:time <val>` and `:poll <val>` commands.
     /// Returns true if the command was recognized and handled.
     fn handle_config_command(&mut self, cmd: &str) -> bool {
-        if let Some(val) = cmd.strip_prefix("past ") {
+        if let Some(val) = cmd.strip_prefix("time ") {
             let val = val.trim();
             match config::validate_duration(val) {
                 Ok(d) => {
