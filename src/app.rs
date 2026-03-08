@@ -3,7 +3,6 @@ use crate::input;
 use crate::model::TrackedMessage;
 use crate::slack::SlackClient;
 use crate::view;
-use crate::view::header::EXPLOSION_END;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode};
@@ -221,6 +220,7 @@ impl App {
         let mut poll_generation: u64 = 0;
         let mut poll_in_flight = false;
         let mut poll_fired_this_cycle = false;
+        let mut drain_start: Option<Instant> = None;
 
         // Do first poll synchronously so there's data on the first frame
         self.poll_messages(&source, &mut messages, &mut seen);
@@ -274,6 +274,7 @@ impl App {
                                 poll_generation += 1;
                                 poll_in_flight = false;
                                 poll_fired_this_cycle = false;
+                                drain_start = None;
                                 handled = true;
                             }
                             if let Some(rest) = cmd.strip_prefix("search ") {
@@ -301,6 +302,7 @@ impl App {
                                     poll_generation += 1;
                                     poll_in_flight = false;
                                     poll_fired_this_cycle = false;
+                                    drain_start = None;
                                     handled = true;
                                 }
                             }
@@ -424,8 +426,7 @@ impl App {
             if let Ok((generation, new_msgs)) = rx.try_recv() {
                 poll_in_flight = false;
                 if generation == poll_generation {
-                    // Reset the cycle so the drain animation starts from here
-                    last_poll = Some(Instant::now() - Duration::from_secs_f64(self.poll.as_secs_f64() * EXPLOSION_END));
+                    drain_start = Some(Instant::now());
                     // Replace messages with latest API results
                     messages.clear();
                     seen.clear();
@@ -436,8 +437,8 @@ impl App {
                 }
             }
 
-            // Spawn background poll once per cycle at the explosion point
-            if !poll_in_flight && !poll_fired_this_cycle && last_poll.is_none_or(|t| t.elapsed().as_secs_f64() >= self.poll.as_secs_f64() * 0.50) {
+            // Spawn background poll at the end of the wave (full interval elapsed)
+            if !poll_in_flight && !poll_fired_this_cycle && last_poll.is_none_or(|t| t.elapsed() >= self.poll) {
                 poll_in_flight = true;
                 poll_fired_this_cycle = true;
                 let client = Arc::clone(&self.client);
@@ -451,10 +452,11 @@ impl App {
                 });
             }
 
-            // Reset animation cycle after full interval (only when not waiting for a fetch)
+            // Reset animation cycle (only when not waiting for a fetch)
             if !poll_in_flight && last_poll.is_none_or(|t| t.elapsed() >= self.poll) {
                 last_poll = Some(Instant::now());
                 poll_fired_this_cycle = false;
+                drain_start = None;
             }
 
             if list_state.selected().is_none() && visible_count > 0 {
@@ -491,6 +493,7 @@ impl App {
             let pi = self.poll;
             let pe = last_poll.map(|t| t.elapsed());
             let pf = poll_in_flight;
+            let de = drain_start.map(|t| t.elapsed());
             let team_name = &self.team_name;
             let tracked_channels: &[(String, String)] = match &source {
                 MessageSource::Channels(channels) => channels,
@@ -514,6 +517,7 @@ impl App {
                         pi,
                         pe,
                         pf,
+                        de,
                         team_name,
                         active_reactions,
                     );

@@ -26,6 +26,7 @@ pub fn render(
     poll: Duration,
     poll_elapsed: Option<Duration>,
     poll_in_flight: bool,
+    drain_elapsed: Option<Duration>,
     team_name: &str,
     active_reactions: &HashSet<String>,
 ) {
@@ -42,6 +43,7 @@ pub fn render(
         Some(poll),
         poll_elapsed,
         poll_in_flight,
+        drain_elapsed,
         &config.header.config_labels(),
         Some(team_name),
     );

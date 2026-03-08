@@ -12,11 +12,7 @@ pub const LOGO_HEIGHT: u16 = 6;
 
 const BLOCKS: &[char] = &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 
-// Phase boundaries (fractions of the cycle)
-const WAVE_END: f64 = 0.50; // 50% wave
-pub const EXPLOSION_END: f64 = 0.54; // 4% all-filled
-const DRAIN_END: f64 = 0.85; // 31% drain
-// hold: 15% all-▁
+const TAIL_LEN: f64 = 7.0;
 
 /// Wave tail: for a cell at integer distance `d` behind the peak returns block level 0–7.
 ///
@@ -31,6 +27,7 @@ pub fn render(
     poll: Option<Duration>,
     poll_elapsed: Option<Duration>,
     poll_in_flight: bool,
+    drain_elapsed: Option<Duration>,
     config_labels: &[(&str, String)],
     workspace_label: Option<&str>,
 ) {
@@ -91,24 +88,39 @@ pub fn render(
         let bar_area = Rect::new(bar_x, bar_y, logo_width, 1);
         let num_cells = bar_width.div_ceil(2); // each cell = block + space
 
+        // Wave peak travels (num_cells - 1 + TAIL_LEN) positions over the poll interval.
+        // Each position takes step_secs. Drain descends 7 levels at the same rate.
         let cycle_secs = interval.as_secs_f64().max(1.0);
+        let total_wave_steps = (num_cells - 1) as f64 + TAIL_LEN;
+        let step_secs = cycle_secs / total_wave_steps;
+        let drain_duration_secs = 7.0 * step_secs;
+
         let elapsed_secs = poll_elapsed.map_or(0.0, |e| e.as_secs_f64());
-        let raw_progress = (elapsed_secs / cycle_secs).min(1.0);
-        // Freeze at explosion while the background fetch is still running
-        let progress = if poll_in_flight && raw_progress >= WAVE_END {
-            WAVE_END
-        } else {
-            raw_progress
-        };
+        let wave_progress = (elapsed_secs / cycle_secs).clamp(0.0, 1.0);
 
         let mut bar = String::with_capacity(bar_width * 4);
 
-        if progress < WAVE_END {
+        if poll_in_flight || (drain_elapsed.is_none() && wave_progress >= 1.0) {
+            // Explosion: all cells full while fetch is in-flight
+            for i in 0..num_cells {
+                bar.push(BLOCKS[7]);
+                if i + 1 < num_cells {
+                    bar.push(' ');
+                }
+            }
+        } else if let Some(drain_el) = drain_elapsed {
+            // Drain: descent from █ to ▁ at the same step rate as the wave
+            let drain_progress = (drain_el.as_secs_f64() / drain_duration_secs).clamp(0.0, 1.0);
+            let level = ((1.0 - drain_progress) * 7.0).round() as usize;
+            for i in 0..num_cells {
+                bar.push(BLOCKS[level]);
+                if i + 1 < num_cells {
+                    bar.push(' ');
+                }
+            }
+        } else if wave_progress < 1.0 {
             // Wave phase: peak sweeps left → right with a trailing gradient
-            let wave_progress = progress / WAVE_END;
-            let tail_len = 7.0_f64;
-            // Peak travels from off-screen left to the last cell
-            let peak = -tail_len + wave_progress * ((num_cells - 1) as f64 + tail_len);
+            let peak = -TAIL_LEN + wave_progress * ((num_cells - 1) as f64 + TAIL_LEN);
 
             for i in 0..num_cells {
                 let d = peak - i as f64;
@@ -122,26 +134,8 @@ pub fn render(
                     bar.push(' ');
                 }
             }
-        } else if progress < EXPLOSION_END {
-            // Explosion: all cells snap to full
-            for i in 0..num_cells {
-                bar.push(BLOCKS[7]);
-                if i + 1 < num_cells {
-                    bar.push(' ');
-                }
-            }
-        } else if progress < DRAIN_END {
-            // Drain: uniform descent from █ to ▁
-            let drain_progress = (progress - EXPLOSION_END) / (DRAIN_END - EXPLOSION_END);
-            let level = ((1.0 - drain_progress) * 7.0).round() as usize;
-            for i in 0..num_cells {
-                bar.push(BLOCKS[level]);
-                if i + 1 < num_cells {
-                    bar.push(' ');
-                }
-            }
         } else {
-            // Hold: all ▁ until next poll
+            // Idle: all ▁
             for i in 0..num_cells {
                 bar.push(BLOCKS[0]);
                 if i + 1 < num_cells {
