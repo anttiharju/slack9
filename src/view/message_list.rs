@@ -44,7 +44,7 @@ pub fn render(
     // Commands hint line
     let commands_line = Line::from(vec![
         Span::styled("commands", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
-        Span::styled(" : poll past search", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+        Span::styled(" :poll :past :search", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
     ]);
     frame.render_widget(ratatui::widgets::Paragraph::new(commands_line), outer[1]);
 
