@@ -21,7 +21,7 @@ pub enum TuiCommand {
     /// Switch to a channel
     Channel { name: Option<String> },
     /// Quit the application
-    Q,
+    Quit,
 }
 
 pub fn parse_args() {
