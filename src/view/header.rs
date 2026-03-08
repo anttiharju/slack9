@@ -5,7 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use std::time::Duration;
 
-const SMALL_LOGO: &str = include_str!("logo_small.txt");
+const SMALL_LOGO: &str = include_str!("header_logo.txt");
 
 /// Logo height + 1 row for the poll indicator
 pub const LOGO_HEIGHT: u16 = 6;

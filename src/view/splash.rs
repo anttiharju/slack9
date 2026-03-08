@@ -4,7 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
-const BIG_LOGO: &str = include_str!("logo_big.txt");
+const BIG_LOGO: &str = include_str!("splash_logo.txt");
 
 pub fn render(frame: &mut Frame) {
     let area = frame.area();
