@@ -23,7 +23,7 @@ enum TrackResult {
 #[derive(Clone)]
 enum MessageSource {
     Channels(Vec<(String, String)>),
-    Search(String),
+    Search(Vec<String>),
 }
 
 pub struct App {
@@ -107,7 +107,7 @@ impl App {
             }
         }
 
-        let default_source = MessageSource::Search(format!("<@{}>", self.user_id));
+        let default_source = MessageSource::Search(vec![format!("<@{}>", self.user_id)]);
 
         while let TrackResult::Restart = self.track(default_source.clone()) {}
     }
@@ -252,7 +252,7 @@ impl App {
                                             None => format!("@{}", name),
                                         })
                                         .collect();
-                                    source = MessageSource::Search(search_queries.join(" "));
+                                    source = MessageSource::Search(search_queries);
                                     messages.clear();
                                     seen.clear();
                                     last_poll = None;
@@ -505,48 +505,57 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
                 }
             }
         }
-        MessageSource::Search(query) => {
-            if let Ok(resp) = client.search_messages(query)
-                && let Some(search_msgs) = resp.messages
-                && let Some(matches) = search_msgs.matches
-            {
-                for m in &matches {
-                    let (channel_id, channel_name) = match &m.channel {
-                        Some(ch) => (ch.id.clone(), ch.name.clone()),
-                        None => ("unknown".to_string(), "unknown".to_string()),
-                    };
-                    let reaction_emojis: Vec<String> = if let Ok(rr) = client.reactions_get(&channel_id, &m.ts)
-                        && let Some(msg) = &rr.message
-                    {
-                        msg.reactions.iter().map(|r| r.name.clone()).collect()
-                    } else {
-                        Vec::new()
-                    };
-                    if seen_keys.contains(&m.ts) {
-                        results.push(TrackedMessage {
-                            channel_id,
-                            channel_name,
-                            ts: m.ts.clone(),
-                            display_name: String::new(),
-                            text: String::new(),
-                            reaction_emojis,
-                        });
-                        continue;
+        MessageSource::Search(queries) => {
+            let mut all_matches = Vec::new();
+            let mut seen_ts = std::collections::HashSet::new();
+            for query in queries {
+                if let Ok(resp) = client.search_messages(query)
+                    && let Some(search_msgs) = resp.messages
+                    && let Some(matches) = search_msgs.matches
+                {
+                    for m in matches {
+                        if seen_ts.insert(m.ts.clone()) {
+                            all_matches.push(m);
+                        }
                     }
-                    let user_id_str = m.user.as_deref().unwrap_or("unknown");
-                    let display_name = client.resolve_user(user_id_str);
-                    let raw_text = m.text.as_deref().unwrap_or("").to_string();
-                    let text = resolve_mentions(client, &raw_text);
-
+                }
+            }
+            for m in &all_matches {
+                let (channel_id, channel_name) = match &m.channel {
+                    Some(ch) => (ch.id.clone(), ch.name.clone()),
+                    None => ("unknown".to_string(), "unknown".to_string()),
+                };
+                let reaction_emojis: Vec<String> = if let Ok(rr) = client.reactions_get(&channel_id, &m.ts)
+                    && let Some(msg) = &rr.message
+                {
+                    msg.reactions.iter().map(|r| r.name.clone()).collect()
+                } else {
+                    Vec::new()
+                };
+                if seen_keys.contains(&m.ts) {
                     results.push(TrackedMessage {
                         channel_id,
                         channel_name,
                         ts: m.ts.clone(),
-                        display_name,
-                        text,
+                        display_name: String::new(),
+                        text: String::new(),
                         reaction_emojis,
                     });
+                    continue;
                 }
+                let user_id_str = m.user.as_deref().unwrap_or("unknown");
+                let display_name = client.resolve_user(user_id_str);
+                let raw_text = m.text.as_deref().unwrap_or("").to_string();
+                let text = resolve_mentions(client, &raw_text);
+
+                results.push(TrackedMessage {
+                    channel_id,
+                    channel_name,
+                    ts: m.ts.clone(),
+                    display_name,
+                    text,
+                    reaction_emojis,
+                });
             }
         }
     }
