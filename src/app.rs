@@ -15,6 +15,7 @@ use std::io;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 enum TrackResult {
     Restart,
@@ -199,12 +200,12 @@ impl App {
     }
 
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
-        let new_msgs = fetch_messages(&self.client, source, self.past, &seen.keys().cloned().collect());
+        let new_msgs = fetch_messages(&self.client, source, self.past);
+        messages.clear();
+        seen.clear();
         for msg in new_msgs {
-            if !seen.contains_key(&msg.ts) {
-                seen.insert(msg.ts.clone(), messages.len());
-                messages.push(msg);
-            }
+            seen.insert(msg.ts.clone(), messages.len());
+            messages.push(msg);
         }
     }
 
@@ -409,17 +410,12 @@ impl App {
                 if generation == poll_generation {
                     // Reset the cycle so the drain animation starts from here
                     last_poll = Some(Instant::now() - Duration::from_secs_f64(self.poll.as_secs_f64() * EXPLOSION_END));
-                    // Update reactions on existing messages
-                    for msg in &new_msgs {
-                        if let Some(&idx) = seen.get(&msg.ts) {
-                            messages[idx].reaction_emojis = msg.reaction_emojis.clone();
-                        }
-                    }
+                    // Replace messages with latest API results
+                    messages.clear();
+                    seen.clear();
                     for msg in new_msgs {
-                        if !seen.contains_key(&msg.ts) {
-                            seen.insert(msg.ts.clone(), messages.len());
-                            messages.push(msg);
-                        }
+                        seen.insert(msg.ts.clone(), messages.len());
+                        messages.push(msg);
                     }
                 }
             }
@@ -431,11 +427,10 @@ impl App {
                 let client = Arc::clone(&self.client);
                 let source_clone = source.clone();
                 let past = self.past;
-                let seen_keys: HashSet<String> = seen.keys().cloned().collect();
                 let generation = poll_generation;
                 let tx = tx.clone();
                 std::thread::spawn(move || {
-                    let results = fetch_messages(&client, &source_clone, past, &seen_keys);
+                    let results = fetch_messages(&client, &source_clone, past);
                     let _ = tx.send((generation, results));
                 });
             }
@@ -520,7 +515,7 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
     result
 }
 
-fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, seen_keys: &HashSet<String>) -> Vec<TrackedMessage> {
+fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) -> Vec<TrackedMessage> {
     let mut results = Vec::new();
     match source {
         MessageSource::Channels(channels) => {
@@ -530,18 +525,6 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
                 {
                     for msg in msgs.iter().rev() {
                         let reaction_emojis: Vec<String> = msg.reactions.iter().map(|r| r.name.clone()).collect();
-                        if seen_keys.contains(&msg.ts) {
-                            // Will be updated with new reactions in the caller
-                            results.push(TrackedMessage {
-                                channel_id: channel_id.clone(),
-                                channel_name: channel_name.clone(),
-                                ts: msg.ts.clone(),
-                                display_name: String::new(),
-                                text: String::new(),
-                                reaction_emojis,
-                            });
-                            continue;
-                        }
                         let user_id = msg.user.as_deref().unwrap_or("unknown");
                         let display_name = client.resolve_user(user_id);
                         let raw_text = msg.text.as_deref().unwrap_or("").to_string();
@@ -560,6 +543,7 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
             }
         }
         MessageSource::Search(queries) => {
+            let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - past.as_secs_f64();
             let mut all_matches = Vec::new();
             let mut seen_ts = std::collections::HashSet::new();
             for query in queries {
@@ -568,7 +552,8 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
                     && let Some(matches) = search_msgs.matches
                 {
                     for m in matches {
-                        if seen_ts.insert(m.ts.clone()) {
+                        let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
+                        if msg_ts >= oldest && seen_ts.insert(m.ts.clone()) {
                             all_matches.push(m);
                         }
                     }
@@ -586,17 +571,6 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
                 } else {
                     Vec::new()
                 };
-                if seen_keys.contains(&m.ts) {
-                    results.push(TrackedMessage {
-                        channel_id,
-                        channel_name,
-                        ts: m.ts.clone(),
-                        display_name: String::new(),
-                        text: String::new(),
-                        reaction_emojis,
-                    });
-                    continue;
-                }
                 let user_id_str = m.user.as_deref().unwrap_or("unknown");
                 let display_name = client.resolve_user(user_id_str);
                 let raw_text = m.text.as_deref().unwrap_or("").to_string();
