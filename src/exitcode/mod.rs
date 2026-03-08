@@ -16,15 +16,15 @@ macro_rules! define_exitcodes {
 }
 
 define_exitcodes! {
-    missing_workspace => MissingWorkspace = 3,
     missing_xoxd => MissingXoxd = 1,
     missing_xoxc => MissingXoxc = 2,
+    missing_workspace => MissingWorkspace = 3,
     auth_rejected => AuthRejected = 4,
     request_failed => RequestFailed = 5,
-    invalid_past => InvalidPast = 7,
-    invalid_poll => InvalidPoll = 8,
-    channel_resolve_error => ChannelResolveError = 9,
-    user_load_error => UserLoadError = 10,
-    missing_team_id => MissingTeamId = 11,
-    missing_user_id => MissingUserId = 12,
+    invalid_past => InvalidPast = 6,
+    invalid_poll => InvalidPoll = 7,
+    channel_resolve_error => ChannelResolveError = 8,
+    user_load_error => UserLoadError = 9,
+    missing_team_id => MissingTeamId = 10,
+    missing_user_id => MissingUserId = 11,
 }
