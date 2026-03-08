@@ -132,10 +132,10 @@ fn parse_duration(s: &str) -> Result<Duration, String> {
     match unit {
         "s" => Ok(Duration::from_secs(value)),
         "m" => Ok(Duration::from_secs(value * 60)),
-        "h" => Ok(Duration::from_secs(value * 3600)),
-        "d" => Ok(Duration::from_secs(value * 86400)),
-        "w" => Ok(Duration::from_secs(value * 7 * 86400)),
-        "M" => Ok(Duration::from_secs(value * 30 * 86400)),
+        "h" => Ok(Duration::from_secs(value * 60 * 60)),
+        "d" => Ok(Duration::from_secs(value * 60 * 60 * 24)),
+        "w" => Ok(Duration::from_secs(value * 60 * 60 * 24 * 7)),
+        "M" => Ok(Duration::from_secs(value * 60 * 60 * 24 * 30)),
         _ => Err(format!("unknown duration unit '{}' in '{}'. Use s, m, h, d, w, or M", unit, s)),
     }
 }
