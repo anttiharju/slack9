@@ -217,6 +217,7 @@ impl App {
         let mut last_poll: Option<Instant>;
         let mut list_state = ListState::default();
         let mut pending_g: Option<char> = None;
+        let mut pending_o = false;
         let (tx, rx) = mpsc::channel::<(u64, Vec<TrackedMessage>)>();
         let mut poll_generation: u64 = 0;
         let mut poll_in_flight = false;
@@ -350,20 +351,32 @@ impl App {
                             let idx = (c as u32 - '1' as u32) as usize;
                             let reaction_names: Vec<String> = self.config.reactions.keys().cloned().collect();
                             if idx < reaction_names.len() {
-                                let name = &reaction_names[idx];
-                                if self.active_reactions.contains(name) {
-                                    self.active_reactions.remove(name);
+                                if pending_o {
+                                    self.active_reactions.clear();
+                                    self.active_reactions.insert(reaction_names[idx].clone());
                                 } else {
-                                    self.active_reactions.insert(name.clone());
+                                    let name = &reaction_names[idx];
+                                    if self.active_reactions.contains(name) {
+                                        self.active_reactions.remove(name);
+                                    } else {
+                                        self.active_reactions.insert(name.clone());
+                                    }
                                 }
                             }
+                            pending_o = false;
+                        }
+                        KeyCode::Char('o') => {
+                            pending_g = None;
+                            pending_o = true;
                         }
                         KeyCode::Char(':') => {
                             pending_g = None;
+                            pending_o = false;
                             self.command_buf = Some(String::new());
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
                             pending_g = None;
+                            pending_o = false;
                             if visible_count > 0 {
                                 let current = list_state.selected().unwrap_or(0);
                                 list_state.select(Some(current.saturating_sub(1)));
@@ -371,6 +384,7 @@ impl App {
                         }
                         KeyCode::Down | KeyCode::Char('j') => {
                             pending_g = None;
+                            pending_o = false;
                             if visible_count > 0 {
                                 let current = list_state.selected().unwrap_or(0);
                                 let i = if current + 1 >= visible_count { visible_count - 1 } else { current + 1 };
@@ -399,6 +413,7 @@ impl App {
                         }
                         KeyCode::Enter => {
                             pending_g = None;
+                            pending_o = false;
                             if let Some(selected) = list_state.selected() {
                                 let visible: Vec<&TrackedMessage> = messages
                                     .iter()
@@ -418,6 +433,7 @@ impl App {
                         }
                         _ => {
                             pending_g = None;
+                            pending_o = false;
                         }
                     }
                 }
