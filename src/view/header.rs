@@ -30,9 +30,8 @@ pub fn render(
     area: Rect,
     poll: Option<Duration>,
     poll_elapsed: Option<Duration>,
-    poll_label: Option<&str>,
+    config_labels: &[(&str, String)],
     workspace_label: Option<&str>,
-    past_label: Option<&str>,
 ) {
     let logo_width = SMALL_LOGO.lines().map(|l| l.len()).max().unwrap_or(0) as u16;
     let lines: Vec<Line> = SMALL_LOGO
@@ -58,37 +57,26 @@ pub fn render(
         frame.render_widget(Paragraph::new(label_line), label_area);
     }
 
-    // Poll interval label on second line
-    if let Some(label) = poll_label {
+    // Config labels on rows below workspace
+    for (i, (name, value)) in config_labels.iter().enumerate() {
+        let title = format!("{}{} ", name.chars().next().unwrap_or_default().to_uppercase(), &name[1..]);
         let mut spans = vec![Span::styled(
-            "Poll ",
+            title,
             Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
         )];
-        if let Some(value) = label.strip_suffix(" (default)") {
-            spans.push(Span::styled(value, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
+        if let Some(val) = value.strip_suffix(" (default)") {
+            spans.push(Span::styled(val, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
             spans.push(Span::styled(" (default)", Style::default().fg(Color::DarkGray)));
         } else {
-            spans.push(Span::styled(label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
+            spans.push(Span::styled(
+                value.as_str(),
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            ));
         }
         let label_line = Line::from(spans);
-        let label_area = Rect::new(area.x, area.y + 2, area.width.saturating_sub(logo_width + 1), 1);
-        frame.render_widget(Paragraph::new(label_line), label_area);
-    }
-
-    // Time window label on third line
-    if let Some(tw) = past_label {
-        let mut spans = vec![Span::styled(
-            "Past ",
-            Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
-        )];
-        if let Some(value) = tw.strip_suffix(" (default)") {
-            spans.push(Span::styled(value, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
-            spans.push(Span::styled(" (default)", Style::default().fg(Color::DarkGray)));
-        } else {
-            spans.push(Span::styled(tw, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
-        }
-        let label_line = Line::from(spans);
-        let label_area = Rect::new(area.x, area.y + 1, area.width.saturating_sub(logo_width + 1), 1);
+        // Place on alternating rows: row 1, row 2, etc. below workspace
+        let row = if i == 0 { area.y + 2 } else { area.y + 1 };
+        let label_area = Rect::new(area.x, row, area.width.saturating_sub(logo_width + 1), 1);
         frame.render_widget(Paragraph::new(label_line), label_area);
     }
 

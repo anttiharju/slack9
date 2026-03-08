@@ -32,31 +32,16 @@ pub fn render(
         .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Min(1)])
         .split(area);
 
-    header::render(
-        frame,
-        outer[0],
-        Some(poll),
-        poll_elapsed,
-        Some(&config.header.poll_label()),
-        Some(team_name),
-        Some(&config.header.past_label()),
-    );
+    header::render(frame, outer[0], Some(poll), poll_elapsed, &config.header.config_labels(), Some(team_name));
 
     // Commands hint on the same row as the poll indicator (last row of header)
     let mut spans = vec![Span::styled(
         "commands",
-        Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+        Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
     )];
     for (prefix, rest) in cli::tui_command_prefixes() {
-        spans.push(Span::styled(
-            " :",
-            Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
-        ));
-        spans.push(Span::styled(
-            prefix,
-            Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
-        ));
-        spans.push(Span::styled(rest, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
+        spans.push(Span::styled(format!(" :{}", prefix), Style::default().fg(Color::White)));
+        spans.push(Span::styled(rest, Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)));
     }
     let commands_line = Line::from(spans);
     let cmd_area = Rect::new(outer[0].x, outer[0].bottom().saturating_sub(1), outer[0].width, 1);

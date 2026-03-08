@@ -77,6 +77,11 @@ impl HeaderConfig {
             self.poll.clone()
         }
     }
+
+    /// Returns `(command_name, value_label)` pairs for config-backed commands.
+    pub fn config_labels(&self) -> Vec<(&str, String)> {
+        vec![("poll", self.poll_label()), ("time", self.past_label())]
+    }
 }
 
 impl fmt::Display for Config {
