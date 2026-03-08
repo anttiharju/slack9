@@ -42,3 +42,21 @@ export SLACK9_XOXD=xoxd-baz
 
 2. `direnv allow`
 3. `slack9`
+
+## Troubleshooting
+
+### API logs
+
+Launch with `--debug` to store debug logs under `~/.config/slack9/`
+
+### Build results in ProcessFdQuotaExceeded
+
+- Related to https://github.com/ziglang/zig/issues/23273
+
+Simply run
+
+```sh
+ulimit -n 512
+```
+
+This unfortunately cannot be packaged into the direnv setup.
