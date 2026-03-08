@@ -29,7 +29,7 @@ pub fn render(
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Length(1), Constraint::Min(1)])
+        .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Min(1)])
         .split(area);
 
     header::render(
@@ -42,15 +42,16 @@ pub fn render(
         Some(&config.header.past_label()),
     );
 
-    // Commands hint line
+    // Commands hint on the same row as the poll indicator (last row of header)
     let cmd_names: String = cli::tui_command_names().iter().map(|n| format!(":{}", n)).collect::<Vec<_>>().join(" ");
     let commands_line = Line::from(vec![
         Span::styled("commands", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
         Span::styled(format!(" {}", cmd_names), Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
     ]);
-    frame.render_widget(ratatui::widgets::Paragraph::new(commands_line), outer[1]);
+    let cmd_area = Rect::new(outer[0].x, outer[0].bottom().saturating_sub(1), outer[0].width, 1);
+    frame.render_widget(ratatui::widgets::Paragraph::new(commands_line), cmd_area);
 
-    let content_area = outer[2];
+    let content_area = outer[1];
 
     let chunks = if has_overlay {
         Layout::default()
