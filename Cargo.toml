@@ -9,8 +9,8 @@ edition = "2024"
 include = ["src/**", "tests/**"]
 
 [dependencies]
-anstyle = "1.0.13"
-clap = { version = "4.5.57", features = ["cargo", "derive"] }
+anstyle = "1.0"
+clap = { version = "4.5", features = ["cargo", "derive"] }
 crossterm = "0.29"
 indexmap = { version = "2", features = ["serde"] }
 ratatui = "0.30"
