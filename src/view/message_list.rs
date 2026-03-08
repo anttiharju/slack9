@@ -99,7 +99,6 @@ pub fn render(
         .block(
             Block::default()
                 .title(title)
-                .title_bottom(" :quit to quit ")
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(list_border_color))
                 .padding(Padding::new(1, 1, 0, 0)),
