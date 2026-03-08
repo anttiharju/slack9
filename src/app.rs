@@ -32,6 +32,7 @@ pub struct App {
     client: Arc<SlackClient>,
     config: Config,
     all_channels: Vec<(String, String)>,
+    channels_loaded: bool,
     user_names: Vec<String>,
     team_id: String,
     team_name: String,
@@ -53,16 +54,7 @@ impl Drop for App {
 
 impl App {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        client: SlackClient,
-        config: Config,
-        all_channels: Vec<(String, String)>,
-        team_id: String,
-        team_name: String,
-        user_id: String,
-        past: Duration,
-        poll: Duration,
-    ) -> Self {
+    pub fn new(client: SlackClient, config: Config, team_id: String, team_name: String, user_id: String, past: Duration, poll: Duration) -> Self {
         enable_raw_mode().expect("failed to enable raw mode");
         let mut stdout = io::stdout();
         crossterm::execute!(stdout, EnterAlternateScreen).expect("failed to enter alternate screen");
@@ -81,7 +73,8 @@ impl App {
         Self {
             client: Arc::new(client),
             config,
-            all_channels,
+            all_channels: Vec::new(),
+            channels_loaded: false,
             user_names: Vec::new(),
             team_id,
             team_name,
@@ -116,7 +109,8 @@ impl App {
         while let TrackResult::Restart = self.track(default_source.clone()) {}
     }
 
-    fn find_channel(&self, name: &str) -> Option<(String, String)> {
+    fn find_channel(&mut self, name: &str) -> Option<(String, String)> {
+        self.ensure_channels_loaded();
         let name = name.trim().trim_start_matches('#');
         self.all_channels
             .iter()
@@ -163,8 +157,18 @@ impl App {
         let _ = config::save(&self.config);
     }
 
-    fn resolve_initial_source(&self) -> MessageSource {
-        if let Some(view) = &self.config.state.view {
+    fn ensure_channels_loaded(&mut self) {
+        if !self.channels_loaded {
+            self.channels_loaded = true;
+            match self.client.list_channels() {
+                Ok(channels) => self.all_channels = channels,
+                Err(e) => eprintln!("Error listing channels: {}", e),
+            }
+        }
+    }
+
+    fn resolve_initial_source(&mut self) -> MessageSource {
+        if let Some(view) = self.config.state.view.clone() {
             if let Some(rest) = view.strip_prefix("search ") {
                 let queries: Vec<String> = rest
                     .split_whitespace()
@@ -179,10 +183,9 @@ impl App {
                     return MessageSource::Search(queries);
                 }
             } else if let Some(rest) = view.strip_prefix("channel ")
-                && let Some(ch) = self.find_channel(rest)
-            {
-                return MessageSource::Channels(vec![ch]);
-            }
+                && let Some(ch) = self.find_channel(rest) {
+                    return MessageSource::Channels(vec![ch]);
+                }
         }
         MessageSource::Search(vec![format!("<@{}>", self.user_id)])
     }
@@ -244,6 +247,7 @@ impl App {
                 && let Ok(Event::Key(key)) = event::read()
                 && key.kind == KeyEventKind::Press
             {
+                let mut needs_tab_complete = false;
                 if let Some(ref mut buf) = self.command_buf {
                     match key.code {
                         KeyCode::Enter => {
@@ -340,7 +344,7 @@ impl App {
                             self.command_error = false;
                         }
                         KeyCode::Tab => {
-                            input::tab_complete_channel(buf, &self.all_channels, &self.user_names);
+                            needs_tab_complete = true;
                         }
                         _ => {}
                     }
@@ -435,6 +439,12 @@ impl App {
                             pending_g = None;
                             pending_o = false;
                         }
+                    }
+                }
+                if needs_tab_complete {
+                    self.ensure_channels_loaded();
+                    if let Some(ref mut buf) = self.command_buf {
+                        input::tab_complete_channel(buf, &self.all_channels, &self.user_names);
                     }
                 }
             }
