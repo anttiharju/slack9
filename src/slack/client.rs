@@ -14,6 +14,7 @@ pub struct SlackClient {
 
 impl SlackClient {
     pub fn new(workspace_url: String, xoxd: String, xoxc: String, debug: bool) -> Self {
+        assert!(workspace_url.starts_with("https://"), "workspace URL must start with https://");
         let api_log = if debug {
             Some(ApiLog::new().expect("failed to initialize API log"))
         } else {
