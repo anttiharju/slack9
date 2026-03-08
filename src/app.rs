@@ -175,9 +175,10 @@ impl App {
                     return MessageSource::Search(queries);
                 }
             } else if let Some(rest) = view.strip_prefix("channel ")
-                && let Some(ch) = self.find_channel(rest) {
-                    return MessageSource::Channels(vec![ch]);
-                }
+                && let Some(ch) = self.find_channel(rest)
+            {
+                return MessageSource::Channels(vec![ch]);
+            }
         }
         MessageSource::Search(vec![format!("<@{}>", self.user_id)])
     }
@@ -302,6 +303,15 @@ impl App {
                             }
                         }
                         KeyCode::Char(c) => {
+                            if c == ' ' && !buf.contains(' ') {
+                                let abbrev = buf.as_str();
+                                const COMMANDS: &[&str] = &["channel", "poll", "reaction", "search", "time"];
+                                let matches: Vec<&&str> = COMMANDS.iter().filter(|cmd| cmd.starts_with(abbrev)).collect();
+                                if matches.len() == 1 {
+                                    buf.clear();
+                                    buf.push_str(matches[0]);
+                                }
+                            }
                             buf.push(c);
                         }
                         KeyCode::Tab => {
