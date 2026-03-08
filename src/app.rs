@@ -107,7 +107,7 @@ impl App {
             }
         }
 
-        let default_source = MessageSource::Search(vec![format!("<@{}>", self.user_id)]);
+        let default_source = self.resolve_initial_source();
 
         while let TrackResult::Restart = self.track(default_source.clone()) {}
     }
@@ -152,6 +152,34 @@ impl App {
         } else {
             false
         }
+    }
+
+    fn save_view(&mut self, view: &str) {
+        self.config.state.view = Some(view.to_string());
+        let _ = config::save(&self.config);
+    }
+
+    fn resolve_initial_source(&self) -> MessageSource {
+        if let Some(view) = &self.config.state.view {
+            if let Some(rest) = view.strip_prefix("search ") {
+                let queries: Vec<String> = rest
+                    .split_whitespace()
+                    .filter_map(|h| {
+                        let h = h.trim_start_matches('@');
+                        self.client.find_user_display_name(h)
+                    })
+                    .filter_map(|name| self.client.find_user_id(&name))
+                    .map(|id| format!("<@{}>", id))
+                    .collect();
+                if !queries.is_empty() {
+                    return MessageSource::Search(queries);
+                }
+            } else if let Some(rest) = view.strip_prefix("channel ")
+                && let Some(ch) = self.find_channel(rest) {
+                    return MessageSource::Channels(vec![ch]);
+                }
+        }
+        MessageSource::Search(vec![format!("<@{}>", self.user_id)])
     }
 
     fn active_show_emojis(&self) -> Vec<String> {
@@ -228,6 +256,7 @@ impl App {
                             if let Some(name) = channel_arg
                                 && let Some(ch) = self.find_channel(name)
                             {
+                                self.save_view(&format!("channel {}", ch.1));
                                 source = MessageSource::Channels(vec![ch]);
                                 messages.clear();
                                 seen.clear();
@@ -252,6 +281,7 @@ impl App {
                                             None => format!("@{}", name),
                                         })
                                         .collect();
+                                    self.save_view(&format!("search {}", handles.join(" ")));
                                     source = MessageSource::Search(search_queries);
                                     messages.clear();
                                     seen.clear();

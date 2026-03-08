@@ -14,6 +14,20 @@ pub struct Config {
     pub header: HeaderConfig,
     #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
     pub reactions: IndexMap<String, String>,
+    #[serde(default, skip_serializing_if = "StateConfig::is_default")]
+    pub state: StateConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize, Default)]
+pub struct StateConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<String>,
+}
+
+impl StateConfig {
+    fn is_default(&self) -> bool {
+        self.view.is_none()
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
