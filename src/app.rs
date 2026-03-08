@@ -446,7 +446,8 @@ impl App {
                                     })
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
-                                    let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
+                                    let link_ts = msg.thread_ts.as_deref().unwrap_or(&msg.ts);
+                                    let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, link_ts);
                                     let _ = std::process::Command::new("open").arg(&url).spawn();
                                 }
                             }
@@ -614,6 +615,7 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
                             channel_id: channel_id.clone(),
                             channel_name: channel_name.clone(),
                             ts: msg.ts.clone(),
+                            thread_ts: msg.thread_ts.clone(),
                             display_name,
                             text,
                             reaction_emojis,
@@ -656,10 +658,17 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
                 let raw_text = m.text.as_deref().unwrap_or("").to_string();
                 let text = resolve_mentions(client, &raw_text);
 
+                let thread_ts = m.permalink.as_deref().and_then(|p| {
+                    p.split('?')
+                        .nth(1)
+                        .and_then(|qs| qs.split('&').find_map(|param| param.strip_prefix("thread_ts=").map(String::from)))
+                });
+
                 results.push(TrackedMessage {
                     channel_id,
                     channel_name,
                     ts: m.ts.clone(),
+                    thread_ts,
                     display_name,
                     text,
                     reaction_emojis,
