@@ -183,9 +183,10 @@ impl App {
                     return MessageSource::Search(queries);
                 }
             } else if let Some(rest) = view.strip_prefix("channel ")
-                && let Some(ch) = self.find_channel(rest) {
-                    return MessageSource::Channels(vec![ch]);
-                }
+                && let Some(ch) = self.find_channel(rest)
+            {
+                return MessageSource::Channels(vec![ch]);
+            }
         }
         MessageSource::Search(vec![format!("<@{}>", self.user_id)])
     }
