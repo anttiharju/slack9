@@ -23,7 +23,6 @@ define_exitcodes! {
     request_failed => RequestFailed = 5,
     invalid_past => InvalidPast = 6,
     invalid_poll => InvalidPoll = 7,
-    channel_resolve_error => ChannelResolveError = 8,
     user_load_error => UserLoadError = 9,
     missing_team_id => MissingTeamId = 10,
     missing_user_id => MissingUserId = 11,

@@ -69,11 +69,6 @@ fn main() {
         std::process::exit(exitcode::user_load_error());
     });
 
-    let all_channels = client.list_channels().unwrap_or_else(|e| {
-        eprintln!("Error listing channels: {}", e);
-        std::process::exit(exitcode::channel_resolve_error());
-    });
-
-    let app = app::App::new(client, config, all_channels, team_id, team_name, user_id, past, poll);
+    let app = app::App::new(client, config, team_id, team_name, user_id, past, poll);
     app.run();
 }
