@@ -28,7 +28,7 @@ pub fn render(
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Min(1)])
+        .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Length(1), Constraint::Min(1)])
         .split(area);
 
     header::render(
@@ -40,7 +40,15 @@ pub fn render(
         Some(team_name),
         Some(&config.header.past_label()),
     );
-    let content_area = outer[1];
+
+    // Commands hint line
+    let commands_line = Line::from(vec![
+        Span::styled("commands", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
+        Span::styled(" : poll past search", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+    ]);
+    frame.render_widget(ratatui::widgets::Paragraph::new(commands_line), outer[1]);
+
+    let content_area = outer[2];
 
     let chunks = if has_overlay {
         Layout::default()

@@ -122,6 +122,7 @@
                   ""
               }
               lefthook install
+              ulimit -n 8192 # https://github.com/ziglang/zig/issues/23273
             '';
           };
         }
