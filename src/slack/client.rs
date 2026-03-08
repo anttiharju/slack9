@@ -9,7 +9,7 @@ pub struct SlackClient {
     xoxd: String,
     xoxc: String,
     users: HashMap<String, String>,
-    usergroups: HashMap<String, Vec<String>>,
+    usergroups: HashMap<String, String>,
     api_log: Option<ApiLog>,
 }
 
@@ -206,7 +206,7 @@ impl SlackClient {
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
-    fn fetch_usergroups(&self) -> Result<HashMap<String, Vec<String>>, String> {
+    fn fetch_usergroups(&self) -> Result<HashMap<String, String>, String> {
         self.log_api("usergroups.list");
         let url = format!("{}/api/usergroups.list", self.workspace_url);
 
@@ -225,14 +225,14 @@ impl SlackClient {
         let mut map = HashMap::new();
         if let Some(groups) = resp.usergroups {
             for g in groups {
-                map.insert(g.handle, g.users);
+                map.insert(g.handle, g.id);
             }
         }
         Ok(map)
     }
 
-    /// Find user group member IDs by handle.
-    pub fn find_usergroup_member_ids(&self, handle: &str) -> Option<&Vec<String>> {
+    /// Find user group ID by handle.
+    pub fn find_usergroup_id(&self, handle: &str) -> Option<&String> {
         let handle = handle.trim_start_matches('@');
         self.usergroups.get(handle).or_else(|| {
             let handle_lower = handle.to_lowercase();
