@@ -1,12 +1,10 @@
 use super::api_log::ApiLog;
 use super::types::*;
-use reqwest::blocking::Client;
-use reqwest::header::{CONTENT_TYPE, COOKIE};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub struct SlackClient {
-    client: Client,
+    agent: ureq::Agent,
     workspace_url: String,
     xoxd: String,
     xoxc: String,
@@ -22,7 +20,7 @@ impl SlackClient {
             None
         };
         Self {
-            client: Client::new(),
+            agent: ureq::Agent::new_with_defaults(),
             workspace_url: workspace_url.trim_end_matches('/').to_string(),
             xoxd,
             xoxc,
@@ -39,6 +37,17 @@ impl SlackClient {
         if let Some(log) = &self.api_log {
             log.log(method);
         }
+    }
+
+    fn post_form(&self, url: &str, body: &str) -> Result<ureq::Body, String> {
+        let response = self
+            .agent
+            .post(url)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .header("Cookie", &format!("d={}", self.xoxd))
+            .send(body.as_bytes())
+            .map_err(|e| format!("Request failed: {}", e))?;
+        Ok(response.into_body())
     }
 
     /// Find user display name by handle (matches against display names and user IDs).
@@ -92,16 +101,10 @@ impl SlackClient {
                 body.push_str(&format!("&cursor={}", cursor));
             }
 
-            let response = self
-                .client
-                .post(&url)
-                .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-                .header(COOKIE, format!("d={}", self.xoxd))
-                .body(body)
-                .send()
-                .map_err(|e| format!("Request failed: {}", e))?;
-
-            let resp: UsersListResponse = response.json().map_err(|e| format!("Failed to parse response: {}", e))?;
+            let resp: UsersListResponse = self
+                .post_form(&url, &body)?
+                .read_json()
+                .map_err(|e| format!("Failed to parse response: {}", e))?;
 
             if !resp.ok {
                 return Err(format!(
@@ -135,17 +138,8 @@ impl SlackClient {
         self.log_api("auth.test");
         let url = format!("{}/api/auth.test", self.workspace_url);
 
-        let response = self
-            .client
-            .post(&url)
-            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .header(COOKIE, format!("d={}", self.xoxd))
-            .body(format!("token={}", self.xoxc))
-            .send()
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        response
-            .json::<AuthTestResponse>()
+        self.post_form(&url, &format!("token={}", self.xoxc))?
+            .read_json::<AuthTestResponse>()
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
@@ -170,16 +164,10 @@ impl SlackClient {
                 body.push_str(&format!("&cursor={}", cursor));
             }
 
-            let response = self
-                .client
-                .post(&url)
-                .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-                .header(COOKIE, format!("d={}", self.xoxd))
-                .body(body)
-                .send()
-                .map_err(|e| format!("Request failed: {}", e))?;
-
-            let resp: ConversationsListResponse = response.json().map_err(|e| format!("Failed to parse response: {}", e))?;
+            let resp: ConversationsListResponse = self
+                .post_form(&url, &body)?
+                .read_json()
+                .map_err(|e| format!("Failed to parse response: {}", e))?;
 
             if !resp.ok {
                 return Err(format!(
@@ -209,17 +197,8 @@ impl SlackClient {
 
         let url = format!("{}/api/conversations.history", self.workspace_url);
 
-        let response = self
-            .client
-            .post(&url)
-            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .header(COOKIE, format!("d={}", self.xoxd))
-            .body(format!("token={}&channel={}&oldest={}", self.xoxc, channel, oldest))
-            .send()
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        response
-            .json::<ConversationsHistoryResponse>()
+        self.post_form(&url, &format!("token={}&channel={}&oldest={}", self.xoxc, channel, oldest))?
+            .read_json::<ConversationsHistoryResponse>()
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
@@ -237,18 +216,12 @@ impl SlackClient {
         self.log_api("search.messages");
         let url = format!("{}/api/search.messages", self.workspace_url);
 
-        let response = self
-            .client
-            .post(&url)
-            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .header(COOKIE, format!("d={}", self.xoxd))
-            .body(format!("token={}&query={}&count=100&sort=timestamp&sort_dir=desc", self.xoxc, query))
-            .send()
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        response
-            .json::<SearchMessagesResponse>()
-            .map_err(|e| format!("Failed to parse response: {}", e))
+        self.post_form(
+            &url,
+            &format!("token={}&query={}&count=100&sort=timestamp&sort_dir=desc", self.xoxc, query),
+        )?
+        .read_json::<SearchMessagesResponse>()
+        .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
     /// Fetch reactions for a specific message.
@@ -256,17 +229,8 @@ impl SlackClient {
         self.log_api("reactions.get");
         let url = format!("{}/api/reactions.get", self.workspace_url);
 
-        let response = self
-            .client
-            .post(&url)
-            .header(CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .header(COOKIE, format!("d={}", self.xoxd))
-            .body(format!("token={}&channel={}&timestamp={}", self.xoxc, channel, timestamp))
-            .send()
-            .map_err(|e| format!("Request failed: {}", e))?;
-
-        response
-            .json::<ReactionsGetResponse>()
+        self.post_form(&url, &format!("token={}&channel={}&timestamp={}", self.xoxc, channel, timestamp))?
+            .read_json::<ReactionsGetResponse>()
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
 }
