@@ -28,7 +28,22 @@ pub fn parse_args() {
     Cli::parse();
 }
 
-/// Returns the names of all TUI subcommands (e.g. `["poll", "past", "search", ...]`).
-pub fn tui_command_names() -> Vec<String> {
-    Cli::command().get_subcommands().map(|cmd| cmd.get_name().to_string()).collect()
+/// Returns TUI subcommand names split into (unique_prefix, rest) pairs.
+/// The unique prefix is the shortest prefix that distinguishes each command from all others.
+pub fn tui_command_prefixes() -> Vec<(String, String)> {
+    let names: Vec<String> = Cli::command().get_subcommands().map(|cmd| cmd.get_name().to_string()).collect();
+    names
+        .iter()
+        .map(|name| {
+            let mut len = 1;
+            while len < name.len() {
+                let prefix = &name[..len];
+                if names.iter().filter(|other| *other != name && other.starts_with(prefix)).count() == 0 {
+                    break;
+                }
+                len += 1;
+            }
+            (name[..len].to_string(), name[len..].to_string())
+        })
+        .collect()
 }
