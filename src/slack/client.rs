@@ -8,7 +8,6 @@ pub struct SlackClient {
     xoxd: String,
     xoxc: String,
     users: HashMap<String, String>,
-    usergroups: HashMap<String, String>,
     api_log: Option<ApiLog>,
 }
 
@@ -26,7 +25,6 @@ impl SlackClient {
             xoxd,
             xoxc,
             users: HashMap::new(),
-            usergroups: HashMap::new(),
             api_log,
         }
     }
@@ -58,34 +56,8 @@ impl SlackClient {
         Ok(response.into_body())
     }
 
-    /// Find user display name by handle (matches against display names and user IDs).
-    /// Returns the display name if found.
-    pub fn find_user_display_name(&self, handle: &str) -> Option<String> {
-        let handle = handle.trim_start_matches('@');
-        // Exact match on display name
-        if let Some(name) = self.users.values().find(|name| name.eq_ignore_ascii_case(handle)) {
-            return Some(name.clone());
-        }
-        // Exact match on user ID
-        if let Some(name) = self.users.get(handle) {
-            return Some(name.clone());
-        }
-        // Prefix match on display name
-        let handle_lower = handle.to_lowercase();
-        let matches: Vec<_> = self
-            .users
-            .values()
-            .filter(|name| name.to_lowercase().starts_with(&handle_lower))
-            .collect();
-        if matches.len() == 1 {
-            return Some(matches[0].clone());
-        }
-        None
-    }
-
     pub fn load_users(&mut self) -> Result<(), String> {
         self.users = self.fetch_all_users()?;
-        self.usergroups = self.fetch_usergroups().unwrap_or_default();
         Ok(())
     }
 
@@ -142,54 +114,6 @@ impl SlackClient {
         self.post_form(&url, &format!("token={}", self.xoxc))?
             .read_json::<AuthTestResponse>()
             .map_err(|e| format!("Failed to parse response: {}", e))
-    }
-
-    fn fetch_usergroups(&self) -> Result<HashMap<String, String>, String> {
-        self.log_api("usergroups.list");
-        let url = format!("{}/api/usergroups.list", self.workspace_url);
-
-        let resp: UsergroupsListResponse = self
-            .post_form(&url, &format!("token={}&include_users=true", self.xoxc))?
-            .read_json()
-            .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-        if !resp.ok {
-            return Err(format!(
-                "usergroups.list failed: {}",
-                resp.error.unwrap_or_else(|| "unknown error".to_string())
-            ));
-        }
-
-        let mut map = HashMap::new();
-        if let Some(groups) = resp.usergroups {
-            for g in groups {
-                map.insert(g.handle, g.id);
-            }
-        }
-        Ok(map)
-    }
-
-    /// Find user group ID by handle.
-    pub fn find_usergroup_id(&self, handle: &str) -> Option<&String> {
-        let handle = handle.trim_start_matches('@');
-        self.usergroups.get(handle).or_else(|| {
-            let handle_lower = handle.to_lowercase();
-            let matches: Vec<_> = self
-                .usergroups
-                .iter()
-                .filter(|(h, _)| h.to_lowercase().starts_with(&handle_lower))
-                .collect();
-            if matches.len() == 1 { Some(matches[0].1) } else { None }
-        })
-    }
-
-    /// Find user ID by display name (reverse lookup).
-    pub fn find_user_id(&self, display_name: &str) -> Option<String> {
-        let display_name = display_name.trim_start_matches('@');
-        self.users
-            .iter()
-            .find(|(_, name)| name.eq_ignore_ascii_case(display_name))
-            .map(|(id, _)| id.clone())
     }
 
     /// Search messages across all channels using the search.modules.messages API.

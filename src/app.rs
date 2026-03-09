@@ -23,7 +23,7 @@ enum TrackResult {
 
 #[derive(Clone)]
 enum MessageSource {
-    Search(Vec<String>),
+    Search(String),
 }
 
 pub struct App {
@@ -137,53 +137,11 @@ impl App {
     }
 
     fn resolve_initial_source(&mut self) -> MessageSource {
-        if let Some(query) = self.config.state.search.clone() {
-            let queries = self.resolve_search_handles(&query);
-            if !queries.is_empty() {
-                return MessageSource::Search(queries);
+        if let Some(query) = self.config.state.search.clone()
+            && !query.trim().is_empty() {
+                return MessageSource::Search(query);
             }
-        }
-        MessageSource::Search(vec![format!("<@{}>", self.user_id)])
-    }
-
-    /// Resolve search handles (users and user groups) into search queries.
-    /// Unresolved terms are passed through as plain text queries.
-    fn resolve_search_handles(&self, input: &str) -> Vec<String> {
-        let mut queries = Vec::new();
-        for h in input.split_whitespace() {
-            let h = h.trim_start_matches('@');
-            // Try user first
-            if let Some(name) = self.client.find_user_display_name(h)
-                && let Some(id) = self.client.find_user_id(&name)
-            {
-                queries.push(format!("<@{}>", id));
-                continue;
-            }
-            // Try user group
-            if let Some(group_id) = self.client.find_usergroup_id(h) {
-                queries.push(format!("<!subteam^{}>", group_id));
-                continue;
-            }
-            // Plain text query
-            queries.push(h.to_string());
-        }
-        queries
-    }
-
-    /// Collect the display-name / group-handle tokens for saving to config.
-    fn resolve_search_save_names(&self, input: &str) -> Vec<String> {
-        let mut names = Vec::new();
-        for h in input.split_whitespace() {
-            let h = h.trim_start_matches('@');
-            if let Some(name) = self.client.find_user_display_name(h) {
-                names.push(name);
-            } else if self.client.find_usergroup_id(h).is_some() {
-                names.push(h.to_string());
-            } else {
-                names.push(h.to_string());
-            }
-        }
-        names
+        MessageSource::Search(format!("<@{}>", self.user_id))
     }
 
     fn active_show_emojis(&self) -> Vec<String> {
@@ -261,11 +219,10 @@ impl App {
                             }
 
                             if let Some(rest) = cmd.strip_prefix("search ") {
-                                let search_queries = self.resolve_search_handles(rest);
-                                if !search_queries.is_empty() {
-                                    let save_names = self.resolve_search_save_names(rest);
-                                    self.save_query(&save_names.join(" "));
-                                    source = MessageSource::Search(search_queries);
+                                let query = rest.trim();
+                                if !query.is_empty() {
+                                    self.save_query(query);
+                                    source = MessageSource::Search(query.to_string());
                                     messages.clear();
                                     seen.clear();
                                     last_poll = None;
@@ -549,48 +506,46 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
 fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) -> Vec<TrackedMessage> {
     let mut results = Vec::new();
     match source {
-        MessageSource::Search(queries) => {
+        MessageSource::Search(query) => {
             let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - past.as_secs_f64();
             let mut seen_ts = std::collections::HashSet::new();
-            for query in queries {
-                if let Ok(resp) = client.search_modules_messages(query)
-                    && let Some(items) = resp.items
-                {
-                    for item in items {
-                        let (channel_id, channel_name) = match &item.channel {
-                            Some(ch) => (ch.id.clone(), ch.name.clone()),
-                            None => ("unknown".to_string(), "unknown".to_string()),
-                        };
-                        if let Some(messages) = item.messages {
-                            for m in messages {
-                                let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
-                                if msg_ts < oldest || !seen_ts.insert(m.ts.clone()) {
-                                    continue;
-                                }
-                                let reaction_emojis: Vec<String> = m.reactions.iter().map(|r| r.name.clone()).collect();
-                                let user_id_str = m.user.as_deref().unwrap_or("unknown");
-                                let display_name = client.resolve_user(user_id_str);
-                                let raw_text = m.text.as_deref().unwrap_or("").to_string();
-                                let text = resolve_mentions(client, &raw_text);
-
-                                let thread_ts = m.thread_ts.clone().or_else(|| {
-                                    m.permalink.as_deref().and_then(|p| {
-                                        p.split('?')
-                                            .nth(1)
-                                            .and_then(|qs| qs.split('&').find_map(|param| param.strip_prefix("thread_ts=").map(String::from)))
-                                    })
-                                });
-
-                                results.push(TrackedMessage {
-                                    channel_id: channel_id.clone(),
-                                    channel_name: channel_name.clone(),
-                                    ts: m.ts.clone(),
-                                    thread_ts,
-                                    display_name,
-                                    text,
-                                    reaction_emojis,
-                                });
+            if let Ok(resp) = client.search_modules_messages(query)
+                && let Some(items) = resp.items
+            {
+                for item in items {
+                    let (channel_id, channel_name) = match &item.channel {
+                        Some(ch) => (ch.id.clone(), ch.name.clone()),
+                        None => ("unknown".to_string(), "unknown".to_string()),
+                    };
+                    if let Some(messages) = item.messages {
+                        for m in messages {
+                            let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
+                            if msg_ts < oldest || !seen_ts.insert(m.ts.clone()) {
+                                continue;
                             }
+                            let reaction_emojis: Vec<String> = m.reactions.iter().map(|r| r.name.clone()).collect();
+                            let user_id_str = m.user.as_deref().unwrap_or("unknown");
+                            let display_name = client.resolve_user(user_id_str);
+                            let raw_text = m.text.as_deref().unwrap_or("").to_string();
+                            let text = resolve_mentions(client, &raw_text);
+
+                            let thread_ts = m.thread_ts.clone().or_else(|| {
+                                m.permalink.as_deref().and_then(|p| {
+                                    p.split('?')
+                                        .nth(1)
+                                        .and_then(|qs| qs.split('&').find_map(|param| param.strip_prefix("thread_ts=").map(String::from)))
+                                })
+                            });
+
+                            results.push(TrackedMessage {
+                                channel_id: channel_id.clone(),
+                                channel_name: channel_name.clone(),
+                                ts: m.ts.clone(),
+                                thread_ts,
+                                display_name,
+                                text,
+                                reaction_emojis,
+                            });
                         }
                     }
                 }

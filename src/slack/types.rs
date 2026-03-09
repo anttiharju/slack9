@@ -84,20 +84,3 @@ pub struct SearchChannel {
     pub id: String,
     pub name: String,
 }
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct UsergroupsListResponse {
-    pub ok: bool,
-    pub usergroups: Option<Vec<Usergroup>>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct Usergroup {
-    pub id: String,
-    pub handle: String,
-    #[serde(default)]
-    pub users: Vec<String>,
-}
