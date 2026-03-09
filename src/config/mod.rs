@@ -16,10 +16,10 @@ pub struct Config {
     #[serde(
         default,
         skip_serializing_if = "IndexMap::is_empty",
-        deserialize_with = "deserialize_reactions",
-        serialize_with = "serialize_reactions"
+        deserialize_with = "deserialize_categories",
+        serialize_with = "serialize_categories"
     )]
-    pub reactions: IndexMap<String, Vec<String>>,
+    pub categories: IndexMap<String, Vec<String>>,
     #[serde(default, skip_serializing_if = "StateConfig::is_default")]
     pub state: StateConfig,
 }
@@ -104,8 +104,8 @@ impl HeaderConfig {
     }
 }
 
-/// Deserialize reactions: each value can be a single string or an array of strings.
-fn deserialize_reactions<'de, D>(deserializer: D) -> Result<IndexMap<String, Vec<String>>, D::Error>
+/// Deserialize categories: each value can be a single string or an array of strings.
+fn deserialize_categories<'de, D>(deserializer: D) -> Result<IndexMap<String, Vec<String>>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -126,8 +126,8 @@ where
         .collect())
 }
 
-/// Serialize reactions: single-element arrays as a plain string, multi-element as array.
-fn serialize_reactions<S>(map: &IndexMap<String, Vec<String>>, serializer: S) -> Result<S::Ok, S::Error>
+/// Serialize categories: single-element arrays as a plain string, multi-element as array.
+fn serialize_categories<S>(map: &IndexMap<String, Vec<String>>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
@@ -150,9 +150,9 @@ impl fmt::Display for Config {
         writeln!(f, "  [header]")?;
         writeln!(f, "    past: {}", self.header.past)?;
         writeln!(f, "    poll: {}", self.header.poll)?;
-        if !self.reactions.is_empty() {
-            writeln!(f, "  [reactions]")?;
-            for (name, emojis) in &self.reactions {
+        if !self.categories.is_empty() {
+            writeln!(f, "  [categories]")?;
+            for (name, emojis) in &self.categories {
                 if emojis.len() == 1 {
                     writeln!(f, "    {} = {}", name, emojis[0])?;
                 } else {

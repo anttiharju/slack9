@@ -1,7 +1,7 @@
 [header]
 past = "7d"
 
-[reactions]
+[categories]
 blocked = "hourglass"
 completed = "white_check_mark"
 wip = ["eyes", "writing_hand"]

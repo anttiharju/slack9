@@ -21,8 +21,8 @@ pub fn render(
     list_state: &mut ListState,
     poll: &header::PollState,
     team_name: &str,
-    active_reactions: &HashSet<String>,
-    show_unreacted: bool,
+    active_categories: &HashSet<String>,
+    show_uncategorised: bool,
 ) {
     let has_overlay = command_buf.is_some();
 
@@ -80,22 +80,22 @@ pub fn render(
 
     let title = " search ".to_string();
 
-    // Build bottom title for reaction toggles
-    let reaction_names: Vec<&String> = config.reactions.keys().collect();
-    let bottom_title = if reaction_names.is_empty() {
+    // Build bottom title for category toggles
+    let category_names: Vec<&String> = config.categories.keys().collect();
+    let bottom_title = if category_names.is_empty() {
         String::new()
     } else {
-        let mut toggles: Vec<String> = reaction_names
+        let mut toggles: Vec<String> = category_names
             .iter()
             .enumerate()
             .map(|(i, name)| {
-                let check = if active_reactions.contains(*name) { "x" } else { " " };
+                let check = if active_categories.contains(*name) { "x" } else { " " };
                 format!("{}) {} [{}]", i + 1, name, check)
             })
             .collect();
-        let unreacted_check = if show_unreacted { "x" } else { " " };
-        toggles.push(format!("0) unreacted [{}]", unreacted_check));
-        format!(" show messages with reactions for: {} ", toggles.join(" "))
+        let uncategorised_check = if show_uncategorised { "x" } else { " " };
+        toggles.push(format!("0) uncategorised [{}]", uncategorised_check));
+        format!(" show categories: {} ", toggles.join(" "))
     };
 
     let list_border_color = if has_overlay { Color::Blue } else { Color::Cyan };

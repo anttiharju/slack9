@@ -37,8 +37,8 @@ pub struct App {
     command_error: bool,
     past: Duration,
     poll: Duration,
-    active_reactions: HashSet<String>,
-    show_unreacted: bool,
+    active_categories: HashSet<String>,
+    show_uncategorised: bool,
 }
 
 impl Drop for App {
@@ -64,7 +64,7 @@ impl App {
             original_hook(panic);
         }));
 
-        let active_reactions = config.reactions.keys().cloned().collect();
+        let active_categories = config.categories.keys().cloned().collect();
 
         Self {
             client: Arc::new(client),
@@ -77,8 +77,8 @@ impl App {
             command_error: false,
             past,
             poll,
-            active_reactions,
-            show_unreacted: true,
+            active_categories,
+            show_uncategorised: true,
         }
     }
 
@@ -181,9 +181,9 @@ impl App {
     }
 
     fn active_show_emojis(&self) -> Vec<String> {
-        let active = &self.active_reactions;
+        let active = &self.active_categories;
         self.config
-            .reactions
+            .categories
             .iter()
             .filter(|(name, _)| active.contains(*name))
             .flat_map(|(_, emojis)| emojis.iter().cloned())
@@ -191,7 +191,7 @@ impl App {
     }
 
     fn all_configured_emojis(&self) -> Vec<String> {
-        self.config.reactions.values().flatten().cloned().collect()
+        self.config.categories.values().flatten().cloned().collect()
     }
 
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
@@ -225,13 +225,13 @@ impl App {
             // Client-side filtering: show messages that have no configured reaction or at least one active reaction
             let show_emojis = self.active_show_emojis();
             let all_emojis = self.all_configured_emojis();
-            let show_unreacted = self.show_unreacted;
+            let show_uncategorised = self.show_uncategorised;
             let visible_count = messages
                 .iter()
                 .filter(|m| {
                     let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
                     if configured.is_empty() {
-                        show_unreacted
+                        show_uncategorised
                     } else {
                         configured.iter().any(|e| show_emojis.contains(e))
                     }
@@ -309,22 +309,22 @@ impl App {
                         KeyCode::Char('0') => {
                             pending_g = None;
                             pending_o = false;
-                            self.show_unreacted = !self.show_unreacted;
+                            self.show_uncategorised = !self.show_uncategorised;
                         }
                         KeyCode::Char(c @ '1'..='9') => {
                             pending_g = None;
                             let idx = (c as u32 - '1' as u32) as usize;
-                            let reaction_names: Vec<String> = self.config.reactions.keys().cloned().collect();
-                            if idx < reaction_names.len() {
+                            let category_names: Vec<String> = self.config.categories.keys().cloned().collect();
+                            if idx < category_names.len() {
                                 if pending_o {
-                                    self.active_reactions.clear();
-                                    self.active_reactions.insert(reaction_names[idx].clone());
+                                    self.active_categories.clear();
+                                    self.active_categories.insert(category_names[idx].clone());
                                 } else {
-                                    let name = &reaction_names[idx];
-                                    if self.active_reactions.contains(name) {
-                                        self.active_reactions.remove(name);
+                                    let name = &category_names[idx];
+                                    if self.active_categories.contains(name) {
+                                        self.active_categories.remove(name);
                                     } else {
-                                        self.active_reactions.insert(name.clone());
+                                        self.active_categories.insert(name.clone());
                                     }
                                 }
                             }
@@ -385,7 +385,7 @@ impl App {
                                     .filter(|m| {
                                         let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
                                         if configured.is_empty() {
-                                            show_unreacted
+                                            show_uncategorised
                                         } else {
                                             configured.iter().any(|e| show_emojis.contains(e))
                                         }
@@ -477,7 +477,7 @@ impl App {
                     }
                     let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
                     if configured.is_empty() {
-                        show_unreacted
+                        show_uncategorised
                     } else {
                         configured.iter().any(|e| show_emojis.contains(e))
                     }
@@ -494,8 +494,8 @@ impl App {
                 drain_elapsed: drain_start.map(|t| t.elapsed()),
             };
             let team_name = &self.team_name;
-            let active_reactions = &self.active_reactions;
-            let show_unreacted = self.show_unreacted;
+            let active_categories = &self.active_categories;
+            let show_uncategorised = self.show_uncategorised;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -509,8 +509,8 @@ impl App {
                         &mut list_state,
                         &poll_state,
                         team_name,
-                        active_reactions,
-                        show_unreacted,
+                        active_categories,
+                        show_uncategorised,
                     );
                 })
                 .expect("failed to draw");
