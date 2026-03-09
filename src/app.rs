@@ -132,12 +132,12 @@ impl App {
     }
 
     fn save_query(&mut self, query: &str) {
-        self.config.state.query = Some(query.to_string());
+        self.config.state.search = Some(query.to_string());
         let _ = config::save(&self.config);
     }
 
     fn resolve_initial_source(&mut self) -> MessageSource {
-        if let Some(query) = self.config.state.query.clone() {
+        if let Some(query) = self.config.state.search.clone() {
             let queries = self.resolve_search_handles(&query);
             if !queries.is_empty() {
                 return MessageSource::Search(queries);

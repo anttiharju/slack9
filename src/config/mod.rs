@@ -27,12 +27,12 @@ pub struct Config {
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct StateConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub query: Option<String>,
+    pub search: Option<String>,
 }
 
 impl StateConfig {
     fn is_default(&self) -> bool {
-        self.query.is_none()
+        self.search.is_none()
     }
 }
 
