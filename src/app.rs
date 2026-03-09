@@ -135,10 +135,8 @@ impl App {
     }
 
     fn resolve_initial_source(&mut self) -> MessageSource {
-        if let Some(query) = self.config.state.query.clone()
-            && let Some(rest) = query.strip_prefix("search ")
-        {
-            let queries = self.resolve_search_handles(rest);
+        if let Some(query) = self.config.state.query.clone() {
+            let queries = self.resolve_search_handles(&query);
             if !queries.is_empty() {
                 return MessageSource::Search(queries);
             }
@@ -253,7 +251,7 @@ impl App {
                                 let search_queries = self.resolve_search_handles(rest);
                                 if !search_queries.is_empty() {
                                     let save_names = self.resolve_search_save_names(rest);
-                                    self.save_query(&format!("search {}", save_names.join(" ")));
+                                    self.save_query(&save_names.join(" "));
                                     source = MessageSource::Search(search_queries);
                                     messages.clear();
                                     seen.clear();
