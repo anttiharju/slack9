@@ -22,6 +22,7 @@ pub fn render(
     poll: &header::PollState,
     team_name: &str,
     active_reactions: &HashSet<String>,
+    show_unreacted: bool,
 ) {
     let has_overlay = command_buf.is_some();
 
@@ -84,7 +85,7 @@ pub fn render(
     let bottom_title = if reaction_names.is_empty() {
         String::new()
     } else {
-        let toggles: Vec<String> = reaction_names
+        let mut toggles: Vec<String> = reaction_names
             .iter()
             .enumerate()
             .map(|(i, name)| {
@@ -92,6 +93,8 @@ pub fn render(
                 format!("{}) {} [{}]", i + 1, name, check)
             })
             .collect();
+        let unreacted_check = if show_unreacted { "x" } else { " " };
+        toggles.push(format!("0) unreacted [{}]", unreacted_check));
         format!(" show messages with reactions for: {} ", toggles.join(" "))
     };
 

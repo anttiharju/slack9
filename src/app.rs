@@ -38,6 +38,7 @@ pub struct App {
     past: Duration,
     poll: Duration,
     active_reactions: HashSet<String>,
+    show_unreacted: bool,
 }
 
 impl Drop for App {
@@ -77,6 +78,7 @@ impl App {
             past,
             poll,
             active_reactions,
+            show_unreacted: true,
         }
     }
 
@@ -223,11 +225,16 @@ impl App {
             // Client-side filtering: show messages that have no configured reaction or at least one active reaction
             let show_emojis = self.active_show_emojis();
             let all_emojis = self.all_configured_emojis();
+            let show_unreacted = self.show_unreacted;
             let visible_count = messages
                 .iter()
                 .filter(|m| {
                     let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
-                    configured.is_empty() || configured.iter().any(|e| show_emojis.contains(e))
+                    if configured.is_empty() {
+                        show_unreacted
+                    } else {
+                        configured.iter().any(|e| show_emojis.contains(e))
+                    }
                 })
                 .count();
 
@@ -299,6 +306,11 @@ impl App {
                     }
                 } else {
                     match key.code {
+                        KeyCode::Char('0') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.show_unreacted = !self.show_unreacted;
+                        }
                         KeyCode::Char(c @ '1'..='9') => {
                             pending_g = None;
                             let idx = (c as u32 - '1' as u32) as usize;
@@ -372,7 +384,11 @@ impl App {
                                     .iter()
                                     .filter(|m| {
                                         let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
-                                        configured.is_empty() || configured.iter().any(|e| show_emojis.contains(e))
+                                        if configured.is_empty() {
+                                            show_unreacted
+                                        } else {
+                                            configured.iter().any(|e| show_emojis.contains(e))
+                                        }
                                     })
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
@@ -460,7 +476,11 @@ impl App {
                         return false;
                     }
                     let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
-                    configured.is_empty() || configured.iter().any(|e| show_emojis.contains(e))
+                    if configured.is_empty() {
+                        show_unreacted
+                    } else {
+                        configured.iter().any(|e| show_emojis.contains(e))
+                    }
                 })
                 .collect();
 
@@ -475,6 +495,7 @@ impl App {
             };
             let team_name = &self.team_name;
             let active_reactions = &self.active_reactions;
+            let show_unreacted = self.show_unreacted;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -489,6 +510,7 @@ impl App {
                         &poll_state,
                         team_name,
                         active_reactions,
+                        show_unreacted,
                     );
                 })
                 .expect("failed to draw");
