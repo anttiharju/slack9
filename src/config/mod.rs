@@ -26,13 +26,49 @@ pub struct Config {
 
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct StateConfig {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub search: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_search",
+        serialize_with = "serialize_search"
+    )]
+    pub search: Option<Vec<String>>,
 }
 
 impl StateConfig {
     fn is_default(&self) -> bool {
         self.search.is_none()
+    }
+}
+
+/// Deserialize search: accepts a single string or an array of strings.
+fn deserialize_search<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        Single(String),
+        Multiple(Vec<String>),
+    }
+
+    let opt: Option<StringOrVec> = Option::deserialize(deserializer)?;
+    Ok(opt.map(|v| match v {
+        StringOrVec::Single(s) => vec![s],
+        StringOrVec::Multiple(v) => v,
+    }))
+}
+
+/// Serialize search: single-element as plain string, multi-element as array.
+fn serialize_search<S>(val: &Option<Vec<String>>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match val {
+        None => serializer.serialize_none(),
+        Some(v) if v.len() == 1 => serializer.serialize_str(&v[0]),
+        Some(v) => v.serialize(serializer),
     }
 }
 

@@ -4,4 +4,4 @@ completed = "white_check_mark"
 wip = ["eyes", "writing_hand"]
 
 [state]
-search = "help"
+search = ["help", "me", "NEED"]
