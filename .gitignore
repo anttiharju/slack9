@@ -35,3 +35,6 @@ site
 /release
 /action
 /homebrew-tap
+
+# Slack9 logs
+debug*.log
