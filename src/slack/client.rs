@@ -41,6 +41,12 @@ impl SlackClient {
         }
     }
 
+    fn log_body(&self, body: &str) {
+        if let Some(log) = &self.api_log {
+            log.log_body(body);
+        }
+    }
+
     fn post_form(&self, url: &str, body: &str) -> Result<ureq::Body, String> {
         let response = self
             .agent
@@ -186,26 +192,24 @@ impl SlackClient {
             .map(|(id, _)| id.clone())
     }
 
-    /// Search messages across all channels.
-    pub fn search_messages(&self, query: &str) -> Result<SearchMessagesResponse, String> {
-        self.log_api("search.messages");
-        let url = format!("{}/api/search.messages", self.workspace_url);
+    /// Search messages across all channels using the search.modules.messages API.
+    pub fn search_modules_messages(&self, query: &str) -> Result<SearchModulesMessagesResponse, String> {
+        self.log_api("search.modules.messages");
+        let url = format!("{}/api/search.modules.messages?_x_gantry=true", self.workspace_url);
 
-        self.post_form(
-            &url,
-            &format!("token={}&query={}&count=100&sort=timestamp&sort_dir=desc", self.xoxc, query),
-        )?
-        .read_json::<SearchMessagesResponse>()
-        .map_err(|e| format!("Failed to parse response: {}", e))
-    }
+        let raw = self
+            .post_form(
+                &url,
+                &format!(
+                    "token={}&query={}&count=100&sort=timestamp&sort_dir=desc&module=messages&extra_message_data=1",
+                    self.xoxc, query
+                ),
+            )?
+            .read_to_string()
+            .map_err(|e| format!("Failed to read response: {}", e))?;
 
-    /// Fetch reactions for a specific message.
-    pub fn reactions_get(&self, channel: &str, timestamp: &str) -> Result<ReactionsGetResponse, String> {
-        self.log_api("reactions.get");
-        let url = format!("{}/api/reactions.get", self.workspace_url);
+        self.log_body(&raw);
 
-        self.post_form(&url, &format!("token={}&channel={}&timestamp={}", self.xoxc, channel, timestamp))?
-            .read_json::<ReactionsGetResponse>()
-            .map_err(|e| format!("Failed to parse response: {}", e))
+        serde_json::from_str::<SearchModulesMessagesResponse>(&raw).map_err(|e| format!("Failed to parse response: {}", e))
     }
 }

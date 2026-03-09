@@ -53,29 +53,29 @@ pub struct Reaction {
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct SearchMessagesResponse {
+pub struct SearchModulesMessagesResponse {
     pub ok: bool,
-    pub messages: Option<SearchMessages>,
+    pub items: Option<Vec<SearchModulesItem>>,
     pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct SearchMessages {
-    pub matches: Option<Vec<SearchMatch>>,
-    pub total: Option<u32>,
+pub struct SearchModulesItem {
+    pub channel: Option<SearchChannel>,
+    pub messages: Option<Vec<SearchModulesMessage>>,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct SearchMatch {
+pub struct SearchModulesMessage {
     pub ts: String,
-    pub text: Option<String>,
     pub user: Option<String>,
+    pub text: Option<String>,
     pub permalink: Option<String>,
-    pub channel: Option<SearchChannel>,
     #[serde(default)]
     pub reactions: Vec<Reaction>,
+    pub thread_ts: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,21 +83,6 @@ pub struct SearchMatch {
 pub struct SearchChannel {
     pub id: String,
     pub name: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct ReactionsGetResponse {
-    pub ok: bool,
-    pub message: Option<ReactionsGetMessage>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct ReactionsGetMessage {
-    #[serde(default)]
-    pub reactions: Vec<Reaction>,
 }
 
 #[derive(Debug, Deserialize)]

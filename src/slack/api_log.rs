@@ -25,6 +25,13 @@ impl ApiLog {
             let _ = file.write_all(line.as_bytes());
         }
     }
+
+    pub fn log_body(&self, body: &str) {
+        let line = format!("[{}] response: {}\n", format_utc(SystemTime::now()), body);
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&self.path) {
+            let _ = file.write_all(line.as_bytes());
+        }
+    }
 }
 
 fn format_utc(t: SystemTime) -> String {
