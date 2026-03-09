@@ -26,6 +26,8 @@ pub struct Config {
 
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct StateConfig {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub user_pings: bool,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -37,7 +39,7 @@ pub struct StateConfig {
 
 impl StateConfig {
     fn is_default(&self) -> bool {
-        self.search.is_none()
+        !self.user_pings && self.search.is_none()
     }
 }
 

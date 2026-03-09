@@ -137,14 +137,28 @@ impl App {
     }
 
     fn resolve_initial_source(&mut self) -> MessageSource {
-        if let Some(queries) = self.config.state.search.clone()
-            && !queries.is_empty()
-            && queries.iter().any(|q| !q.trim().is_empty())
-        {
-            let queries: Vec<String> = queries.into_iter().filter(|q| !q.trim().is_empty()).collect();
-            return MessageSource::Search(queries);
+        let mut queries: Vec<String> = self
+            .config
+            .state
+            .search
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|q| !q.trim().is_empty())
+            .collect();
+
+        if self.config.state.user_pings {
+            let user_query = format!("<@{}>", self.user_id);
+            if !queries.contains(&user_query) {
+                queries.push(user_query);
+            }
         }
-        MessageSource::Search(vec![format!("<@{}>", self.user_id)])
+
+        if queries.is_empty() {
+            queries.push(format!("<@{}>", self.user_id));
+        }
+
+        MessageSource::Search(queries)
     }
 
     fn active_show_emojis(&self) -> Vec<String> {

@@ -4,4 +4,5 @@ completed = "white_check_mark"
 wip = ["eyes", "writing_hand"]
 
 [state]
-search = ["help", "me", "NEED"]
+user_pings = false
+search = "help"
