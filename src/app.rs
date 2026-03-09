@@ -23,15 +23,12 @@ enum TrackResult {
 
 #[derive(Clone)]
 enum MessageSource {
-    Channels(Vec<(String, String)>),
     Search(Vec<String>),
 }
 
 pub struct App {
     client: Arc<SlackClient>,
     config: Config,
-    all_channels: Vec<(String, String)>,
-    channels_loaded: bool,
     team_id: String,
     team_name: String,
     user_id: String,
@@ -71,8 +68,6 @@ impl App {
         Self {
             client: Arc::new(client),
             config,
-            all_channels: Vec::new(),
-            channels_loaded: false,
             team_id,
             team_name,
             user_id,
@@ -102,19 +97,6 @@ impl App {
         let default_source = self.resolve_initial_source();
 
         while let TrackResult::Restart = self.track(default_source.clone()) {}
-    }
-
-    fn find_channel(&mut self, name: &str) -> Option<(String, String)> {
-        self.ensure_channels_loaded();
-        let name = name.trim().trim_start_matches('#');
-        self.all_channels
-            .iter()
-            .find(|(_, n)| n == name)
-            .or_else(|| {
-                let matches: Vec<_> = self.all_channels.iter().filter(|(_, n)| n.starts_with(name)).collect();
-                if matches.len() == 1 { Some(matches[0]) } else { None }
-            })
-            .cloned()
     }
 
     /// Handle `:time <val>` and `:poll <val>` commands.
@@ -152,29 +134,14 @@ impl App {
         let _ = config::save(&self.config);
     }
 
-    fn ensure_channels_loaded(&mut self) {
-        if !self.channels_loaded {
-            self.channels_loaded = true;
-            match self.client.list_channels() {
-                Ok(channels) => self.all_channels = channels,
-                Err(e) => eprintln!("Error listing channels: {}", e),
-            }
-        }
-    }
-
     fn resolve_initial_source(&mut self) -> MessageSource {
-        if let Some(view) = self.config.state.view.clone() {
-            if let Some(rest) = view.strip_prefix("search ") {
+        if let Some(view) = self.config.state.view.clone()
+            && let Some(rest) = view.strip_prefix("search ") {
                 let queries = self.resolve_search_handles(rest);
                 if !queries.is_empty() {
                     return MessageSource::Search(queries);
                 }
-            } else if let Some(rest) = view.strip_prefix("channel ")
-                && let Some(ch) = self.find_channel(rest)
-            {
-                return MessageSource::Channels(vec![ch]);
             }
-        }
         MessageSource::Search(vec![format!("<@{}>", self.user_id)])
     }
 
@@ -288,22 +255,6 @@ impl App {
                                     handled = true;
                                 }
                             }
-                            let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
-                            if let Some(name) = channel_arg
-                                && let Some(ch) = self.find_channel(name)
-                            {
-                                self.save_view(&format!("channel {}", ch.1));
-                                source = MessageSource::Channels(vec![ch]);
-                                messages.clear();
-                                seen.clear();
-                                last_poll = None;
-                                list_state = ListState::default();
-                                poll_generation += 1;
-                                poll_in_flight = false;
-                                poll_fired_this_cycle = false;
-                                drain_start = None;
-                                handled = true;
-                            }
                             if let Some(rest) = cmd.strip_prefix("search ") {
                                 let search_queries = self.resolve_search_handles(rest);
                                 if !search_queries.is_empty() {
@@ -342,7 +293,7 @@ impl App {
                         KeyCode::Char(c) => {
                             if c == ' ' && !buf.contains(' ') {
                                 let abbrev = buf.as_str();
-                                const COMMANDS: &[&str] = &["channel", "poll", "reaction", "search", "time"];
+                                const COMMANDS: &[&str] = &["poll", "reaction", "search", "time"];
                                 let matches: Vec<&&str> = COMMANDS.iter().filter(|cmd| cmd.starts_with(abbrev)).collect();
                                 if matches.len() == 1 {
                                     buf.clear();
@@ -531,10 +482,6 @@ impl App {
                 drain_elapsed: drain_start.map(|t| t.elapsed()),
             };
             let team_name = &self.team_name;
-            let tracked_channels: &[(String, String)] = match &source {
-                MessageSource::Channels(channels) => channels,
-                MessageSource::Search(_) => &[],
-            };
             let active_reactions = &self.active_reactions;
             self.terminal
                 .draw(|frame| {
@@ -545,7 +492,6 @@ impl App {
                         command_buf_snapshot.as_deref(),
                         command_error,
                         &visible_messages,
-                        tracked_channels,
                         config,
                         &mut list_state,
                         &poll_state,
@@ -576,31 +522,6 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
 fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) -> Vec<TrackedMessage> {
     let mut results = Vec::new();
     match source {
-        MessageSource::Channels(channels) => {
-            for (channel_id, channel_name) in channels {
-                if let Ok(resp) = client.conversations_history(channel_id, past)
-                    && let Some(msgs) = resp.messages
-                {
-                    for msg in msgs.iter().rev() {
-                        let reaction_emojis: Vec<String> = msg.reactions.iter().map(|r| r.name.clone()).collect();
-                        let user_id = msg.user.as_deref().unwrap_or("unknown");
-                        let display_name = client.resolve_user(user_id);
-                        let raw_text = msg.text.as_deref().unwrap_or("").to_string();
-                        let text = resolve_mentions(client, &raw_text);
-
-                        results.push(TrackedMessage {
-                            channel_id: channel_id.clone(),
-                            channel_name: channel_name.clone(),
-                            ts: msg.ts.clone(),
-                            thread_ts: msg.thread_ts.clone(),
-                            display_name,
-                            text,
-                            reaction_emojis,
-                        });
-                    }
-                }
-            }
-        }
         MessageSource::Search(queries) => {
             let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - past.as_secs_f64();
             let mut all_matches = Vec::new();

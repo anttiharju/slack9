@@ -17,7 +17,6 @@ pub fn render(
     command_buf: Option<&str>,
     command_error: bool,
     messages: &[&TrackedMessage],
-    tracked_channels: &[(String, String)],
     config: &Config,
     list_state: &mut ListState,
     poll: &header::PollState,
@@ -78,17 +77,7 @@ pub fn render(
         })
         .collect();
 
-    let view_label = if tracked_channels.is_empty() {
-        "search".to_string()
-    } else {
-        tracked_channels
-            .iter()
-            .map(|(_, name)| format!("#{}", name))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-
-    let title = format!(" {} ", view_label);
+    let title = " search ".to_string();
 
     // Build bottom title for reaction toggles
     let reaction_names: Vec<&String> = config.reactions.keys().collect();

@@ -15,22 +15,6 @@ pub struct AuthTestResponse {
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct ConversationsListResponse {
-    pub ok: bool,
-    pub channels: Option<Vec<Channel>>,
-    pub response_metadata: Option<ResponseMetadata>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct Channel {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct ResponseMetadata {
     pub next_cursor: Option<String>,
 }
@@ -57,28 +41,6 @@ pub struct User {
 pub struct UserProfile {
     pub display_name: Option<String>,
     pub real_name: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct ConversationsHistoryResponse {
-    pub ok: bool,
-    pub messages: Option<Vec<Message>>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct Message {
-    pub ts: String,
-    pub thread_ts: Option<String>,
-    pub user: Option<String>,
-    pub text: Option<String>,
-    #[serde(rename = "type")]
-    pub msg_type: Option<String>,
-    pub subtype: Option<String>,
-    #[serde(default)]
-    pub reactions: Vec<Reaction>,
 }
 
 #[derive(Debug, Deserialize)]

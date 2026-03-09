@@ -1,7 +1,6 @@
 use super::api_log::ApiLog;
 use super::types::*;
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub struct SlackClient {
     agent: ureq::Agent,
@@ -136,65 +135,6 @@ impl SlackClient {
 
         self.post_form(&url, &format!("token={}", self.xoxc))?
             .read_json::<AuthTestResponse>()
-            .map_err(|e| format!("Failed to parse response: {}", e))
-    }
-
-    /// Lists all accessible channels as (id, name) pairs sorted by name.
-    pub fn list_channels(&self) -> Result<Vec<(String, String)>, String> {
-        let map = self.fetch_all_channels()?;
-        let mut channels: Vec<(String, String)> = map.into_iter().map(|(name, id)| (id, name)).collect();
-        channels.sort_by(|a, b| a.1.cmp(&b.1));
-        Ok(channels)
-    }
-
-    fn fetch_all_channels(&self) -> Result<HashMap<String, String>, String> {
-        let mut map = HashMap::new();
-        let mut cursor = String::new();
-
-        loop {
-            self.log_api("conversations.list");
-            let url = format!("{}/api/conversations.list", self.workspace_url);
-
-            let mut body = format!("token={}&types=public_channel,private_channel&limit=1000", self.xoxc);
-            if !cursor.is_empty() {
-                body.push_str(&format!("&cursor={}", cursor));
-            }
-
-            let resp: ConversationsListResponse = self
-                .post_form(&url, &body)?
-                .read_json()
-                .map_err(|e| format!("Failed to parse response: {}", e))?;
-
-            if !resp.ok {
-                return Err(format!(
-                    "conversations.list failed: {}",
-                    resp.error.unwrap_or_else(|| "unknown error".to_string())
-                ));
-            }
-
-            if let Some(channels) = resp.channels {
-                for ch in channels {
-                    map.insert(ch.name, ch.id);
-                }
-            }
-
-            match resp.response_metadata.and_then(|m| m.next_cursor) {
-                Some(c) if !c.is_empty() => cursor = c,
-                _ => break,
-            }
-        }
-
-        Ok(map)
-    }
-
-    pub fn conversations_history(&self, channel: &str, time_window: Duration) -> Result<ConversationsHistoryResponse, String> {
-        self.log_api("conversations.history");
-        let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - time_window.as_secs_f64();
-
-        let url = format!("{}/api/conversations.history", self.workspace_url);
-
-        self.post_form(&url, &format!("token={}&channel={}&oldest={}", self.xoxc, channel, oldest))?
-            .read_json::<ConversationsHistoryResponse>()
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
