@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
-const DEFAULT_PAST: &str = "24h";
+const DEFAULT_PAST: &str = "7d";
 const DEFAULT_POLL: &str = "10s";
 
 #[derive(Debug, Deserialize, Serialize, Default)]

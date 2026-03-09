@@ -1,6 +1,3 @@
-[header]
-past = "7d"
-
 [categories]
 blocked = "hourglass"
 completed = "white_check_mark"
