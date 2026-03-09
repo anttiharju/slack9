@@ -2,7 +2,6 @@ mod app;
 mod cli;
 mod config;
 mod exitcode;
-mod input;
 mod model;
 mod slack;
 mod view;

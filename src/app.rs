@@ -1,5 +1,4 @@
 use crate::config::{self, Config};
-use crate::input;
 use crate::model::TrackedMessage;
 use crate::slack::SlackClient;
 use crate::view;
@@ -33,7 +32,6 @@ pub struct App {
     config: Config,
     all_channels: Vec<(String, String)>,
     channels_loaded: bool,
-    user_names: Vec<String>,
     team_id: String,
     team_name: String,
     user_id: String,
@@ -75,7 +73,6 @@ impl App {
             config,
             all_channels: Vec::new(),
             channels_loaded: false,
-            user_names: Vec::new(),
             team_id,
             team_name,
             user_id,
@@ -89,12 +86,6 @@ impl App {
     }
 
     pub fn run(mut self) {
-        let mut names = self.client.user_names();
-        names.extend(self.client.usergroup_handles());
-        names.sort();
-        names.dedup();
-        self.user_names = names;
-
         // Show splash screen for 1 second
         let splash_start = Instant::now();
         while splash_start.elapsed() < Duration::from_secs(1) {
@@ -278,7 +269,6 @@ impl App {
                 && let Ok(Event::Key(key)) = event::read()
                 && key.kind == KeyEventKind::Press
             {
-                let mut needs_tab_complete = false;
                 if let Some(ref mut buf) = self.command_buf {
                     match key.code {
                         KeyCode::Enter => {
@@ -361,9 +351,6 @@ impl App {
                             }
                             buf.push(c);
                             self.command_error = false;
-                        }
-                        KeyCode::Tab => {
-                            needs_tab_complete = true;
                         }
                         _ => {}
                     }
@@ -461,12 +448,6 @@ impl App {
                         }
                     }
                 }
-                if needs_tab_complete {
-                    self.ensure_channels_loaded();
-                    if let Some(ref mut buf) = self.command_buf {
-                        input::tab_complete_channel(buf, &self.all_channels, &self.user_names);
-                    }
-                }
             }
 
             // Receive results from background poll
@@ -542,8 +523,6 @@ impl App {
 
             let command_buf_snapshot = self.command_buf.clone();
             let command_error = self.command_error;
-            let all_channels = &self.all_channels;
-            let user_names = &self.user_names;
             let config = &self.config;
             let poll_state = view::header::PollState {
                 interval: self.poll,
@@ -565,8 +544,6 @@ impl App {
                         area,
                         command_buf_snapshot.as_deref(),
                         command_error,
-                        all_channels,
-                        user_names,
                         &visible_messages,
                         tracked_channels,
                         config,

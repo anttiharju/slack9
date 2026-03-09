@@ -84,14 +84,6 @@ impl SlackClient {
         Ok(())
     }
 
-    /// Returns all user display names, sorted.
-    pub fn user_names(&self) -> Vec<String> {
-        let mut names: Vec<String> = self.users.values().cloned().collect();
-        names.sort();
-        names.dedup();
-        names
-    }
-
     fn fetch_all_users(&self) -> Result<HashMap<String, String>, String> {
         let mut map = HashMap::new();
         let mut cursor = String::new();
@@ -243,13 +235,6 @@ impl SlackClient {
                 .collect();
             if matches.len() == 1 { Some(matches[0].1) } else { None }
         })
-    }
-
-    /// Returns all usergroup handles, sorted.
-    pub fn usergroup_handles(&self) -> Vec<String> {
-        let mut handles: Vec<String> = self.usergroups.keys().cloned().collect();
-        handles.sort();
-        handles
     }
 
     /// Find user ID by display name (reverse lookup).
