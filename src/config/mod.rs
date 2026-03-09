@@ -145,7 +145,8 @@ where
 
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Config (~/.config/slack9/config.toml):")?;
+        let dir = config_dir().unwrap_or_else(|_| PathBuf::from("~/.config/slack9"));
+        writeln!(f, "Config ({}/config.toml):", dir.display())?;
         writeln!(f, "  [header]")?;
         writeln!(f, "    past: {}", self.header.past)?;
         writeln!(f, "    poll: {}", self.header.poll)?;
@@ -223,7 +224,14 @@ pub fn save(config: &Config) -> Result<(), String> {
     fs::write(&path, contents).map_err(|e| format!("failed to write {}: {}", path.display(), e))
 }
 
-fn config_path() -> Result<PathBuf, String> {
+pub fn config_dir() -> Result<PathBuf, String> {
+    if let Ok(dir) = std::env::var("SLACK9_CONFIG_DIR") {
+        return Ok(PathBuf::from(dir));
+    }
     let home = std::env::var("HOME").map_err(|_| "Could not determine home directory".to_string())?;
-    Ok(PathBuf::from(home).join(".config/slack9/config.toml"))
+    Ok(PathBuf::from(home).join(".config/slack9"))
+}
+
+fn config_path() -> Result<PathBuf, String> {
+    Ok(config_dir()?.join("config.toml"))
 }

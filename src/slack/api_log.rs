@@ -1,3 +1,4 @@
+use crate::config;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -9,8 +10,7 @@ pub struct ApiLog {
 
 impl ApiLog {
     pub fn new() -> Result<Self, String> {
-        let home = std::env::var("HOME").map_err(|_| "Could not determine home directory".to_string())?;
-        let dir = PathBuf::from(home).join(".config/slack9");
+        let dir = config::config_dir()?;
         fs::create_dir_all(&dir).map_err(|e| format!("failed to create log directory: {}", e))?;
 
         let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
