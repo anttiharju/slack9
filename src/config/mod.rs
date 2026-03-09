@@ -1,5 +1,6 @@
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
+use serde::de::Deserializer;
+use serde::{Deserialize, Serialize, Serializer};
 use std::fmt;
 use std::fs;
 use std::path::PathBuf;
@@ -12,8 +13,13 @@ const DEFAULT_POLL: &str = "10s";
 pub struct Config {
     #[serde(default, skip_serializing_if = "HeaderConfig::is_default")]
     pub header: HeaderConfig,
-    #[serde(default, skip_serializing_if = "IndexMap::is_empty")]
-    pub reactions: IndexMap<String, String>,
+    #[serde(
+        default,
+        skip_serializing_if = "IndexMap::is_empty",
+        deserialize_with = "deserialize_reactions",
+        serialize_with = "serialize_reactions"
+    )]
+    pub reactions: IndexMap<String, Vec<String>>,
     #[serde(default, skip_serializing_if = "StateConfig::is_default")]
     pub state: StateConfig,
 }
@@ -98,6 +104,45 @@ impl HeaderConfig {
     }
 }
 
+/// Deserialize reactions: each value can be a single string or an array of strings.
+fn deserialize_reactions<'de, D>(deserializer: D) -> Result<IndexMap<String, Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrVec {
+        Single(String),
+        Multiple(Vec<String>),
+    }
+
+    let raw: IndexMap<String, StringOrVec> = IndexMap::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .map(|(k, v)| match v {
+            StringOrVec::Single(s) => (k, vec![s]),
+            StringOrVec::Multiple(v) => (k, v),
+        })
+        .collect())
+}
+
+/// Serialize reactions: single-element arrays as a plain string, multi-element as array.
+fn serialize_reactions<S>(map: &IndexMap<String, Vec<String>>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    use serde::ser::SerializeMap;
+    let mut ser_map = serializer.serialize_map(Some(map.len()))?;
+    for (k, v) in map {
+        if v.len() == 1 {
+            ser_map.serialize_entry(k, &v[0])?;
+        } else {
+            ser_map.serialize_entry(k, v)?;
+        }
+    }
+    ser_map.end()
+}
+
 impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Config (~/.config/slack9/config.toml):")?;
@@ -106,8 +151,12 @@ impl fmt::Display for Config {
         writeln!(f, "    poll: {}", self.header.poll)?;
         if !self.reactions.is_empty() {
             writeln!(f, "  [reactions]")?;
-            for (name, emoji) in &self.reactions {
-                writeln!(f, "    {} = {}", name, emoji)?;
+            for (name, emojis) in &self.reactions {
+                if emojis.len() == 1 {
+                    writeln!(f, "    {} = {}", name, emojis[0])?;
+                } else {
+                    writeln!(f, "    {} = [{}]", name, emojis.join(", "))?;
+                }
             }
         }
         Ok(())

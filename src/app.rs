@@ -136,12 +136,13 @@ impl App {
 
     fn resolve_initial_source(&mut self) -> MessageSource {
         if let Some(view) = self.config.state.view.clone()
-            && let Some(rest) = view.strip_prefix("search ") {
-                let queries = self.resolve_search_handles(rest);
-                if !queries.is_empty() {
-                    return MessageSource::Search(queries);
-                }
+            && let Some(rest) = view.strip_prefix("search ")
+        {
+            let queries = self.resolve_search_handles(rest);
+            if !queries.is_empty() {
+                return MessageSource::Search(queries);
             }
+        }
         MessageSource::Search(vec![format!("<@{}>", self.user_id)])
     }
 
@@ -185,12 +186,12 @@ impl App {
             .reactions
             .iter()
             .filter(|(name, _)| active.contains(*name))
-            .map(|(_, emoji)| emoji.clone())
+            .flat_map(|(_, emojis)| emojis.iter().cloned())
             .collect()
     }
 
     fn all_configured_emojis(&self) -> Vec<String> {
-        self.config.reactions.values().cloned().collect()
+        self.config.reactions.values().flatten().cloned().collect()
     }
 
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
@@ -247,14 +248,7 @@ impl App {
                             if self.handle_config_command(&cmd) {
                                 handled = true;
                             }
-                            if let Some(rest) = cmd.strip_prefix("reaction ") {
-                                let mut parts = rest.split_whitespace();
-                                if let (Some(name), Some(emoji)) = (parts.next(), parts.next()) {
-                                    self.config.reactions.insert(name.to_string(), emoji.to_string());
-                                    let _ = config::save(&self.config);
-                                    handled = true;
-                                }
-                            }
+
                             if let Some(rest) = cmd.strip_prefix("search ") {
                                 let search_queries = self.resolve_search_handles(rest);
                                 if !search_queries.is_empty() {
@@ -293,7 +287,7 @@ impl App {
                         KeyCode::Char(c) => {
                             if c == ' ' && !buf.contains(' ') {
                                 let abbrev = buf.as_str();
-                                const COMMANDS: &[&str] = &["poll", "reaction", "search", "time"];
+                                const COMMANDS: &[&str] = &["poll", "search", "time"];
                                 let matches: Vec<&&str> = COMMANDS.iter().filter(|cmd| cmd.starts_with(abbrev)).collect();
                                 if matches.len() == 1 {
                                     buf.clear();
