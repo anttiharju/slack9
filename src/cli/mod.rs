@@ -22,8 +22,6 @@ pub enum TuiCommand {
     Time { value: Option<String> },
     /// Search for messages by user
     Search { query: Vec<String> },
-    /// Define a reaction filter
-    Reaction { name: String, emoji: String },
     /// Quit the application
     Quit,
 }
