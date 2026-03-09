@@ -1,3 +1,4 @@
+use crate::config;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
@@ -9,8 +10,7 @@ pub struct ApiLog {
 
 impl ApiLog {
     pub fn new() -> Result<Self, String> {
-        let home = std::env::var("HOME").map_err(|_| "Could not determine home directory".to_string())?;
-        let dir = PathBuf::from(home).join(".config/slack9");
+        let dir = config::config_dir()?;
         fs::create_dir_all(&dir).map_err(|e| format!("failed to create log directory: {}", e))?;
 
         let epoch = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
@@ -21,6 +21,13 @@ impl ApiLog {
 
     pub fn log(&self, api_method: &str) {
         let line = format!("[{}] {}\n", format_utc(SystemTime::now()), api_method);
+        if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&self.path) {
+            let _ = file.write_all(line.as_bytes());
+        }
+    }
+
+    pub fn log_body(&self, body: &str) {
+        let line = format!("[{}] response: {}\n", format_utc(SystemTime::now()), body);
         if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&self.path) {
             let _ = file.write_all(line.as_bytes());
         }

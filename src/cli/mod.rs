@@ -6,7 +6,7 @@ use style::get_style;
 #[derive(Parser)]
 #[command(styles = get_style())]
 struct Cli {
-    /// Enable API usage logging to ~/.config/slack9/debug<epoch>.log
+    /// Enable API usage logging to $SLACK9_CONFIG_DIR/debug<epoch>.log
     #[arg(long)]
     debug: bool,
 
@@ -22,10 +22,6 @@ pub enum TuiCommand {
     Time { value: Option<String> },
     /// Search for messages by user
     Search { query: Vec<String> },
-    /// Switch to a channel
-    Channel { name: Option<String> },
-    /// Define a reaction filter
-    Reaction { name: String, emoji: String },
     /// Quit the application
     Quit,
 }

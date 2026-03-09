@@ -1,5 +1,4 @@
 use crate::config::{self, Config};
-use crate::input;
 use crate::model::TrackedMessage;
 use crate::slack::SlackClient;
 use crate::view;
@@ -24,16 +23,12 @@ enum TrackResult {
 
 #[derive(Clone)]
 enum MessageSource {
-    Channels(Vec<(String, String)>),
     Search(Vec<String>),
 }
 
 pub struct App {
     client: Arc<SlackClient>,
     config: Config,
-    all_channels: Vec<(String, String)>,
-    channels_loaded: bool,
-    user_names: Vec<String>,
     team_id: String,
     team_name: String,
     user_id: String,
@@ -42,7 +37,8 @@ pub struct App {
     command_error: bool,
     past: Duration,
     poll: Duration,
-    active_reactions: HashSet<String>,
+    active_categories: HashSet<String>,
+    show_uncategorised: bool,
 }
 
 impl Drop for App {
@@ -68,14 +64,11 @@ impl App {
             original_hook(panic);
         }));
 
-        let active_reactions = config.reactions.keys().cloned().collect();
+        let active_categories = config.categories.keys().cloned().collect();
 
         Self {
             client: Arc::new(client),
             config,
-            all_channels: Vec::new(),
-            channels_loaded: false,
-            user_names: Vec::new(),
             team_id,
             team_name,
             user_id,
@@ -84,17 +77,12 @@ impl App {
             command_error: false,
             past,
             poll,
-            active_reactions,
+            active_categories,
+            show_uncategorised: true,
         }
     }
 
     pub fn run(mut self) {
-        let mut names = self.client.user_names();
-        names.extend(self.client.usergroup_handles());
-        names.sort();
-        names.dedup();
-        self.user_names = names;
-
         // Show splash screen for 1 second
         let splash_start = Instant::now();
         while splash_start.elapsed() < Duration::from_secs(1) {
@@ -111,19 +99,6 @@ impl App {
         let default_source = self.resolve_initial_source();
 
         while let TrackResult::Restart = self.track(default_source.clone()) {}
-    }
-
-    fn find_channel(&mut self, name: &str) -> Option<(String, String)> {
-        self.ensure_channels_loaded();
-        let name = name.trim().trim_start_matches('#');
-        self.all_channels
-            .iter()
-            .find(|(_, n)| n == name)
-            .or_else(|| {
-                let matches: Vec<_> = self.all_channels.iter().filter(|(_, n)| n.starts_with(name)).collect();
-                if matches.len() == 1 { Some(matches[0]) } else { None }
-            })
-            .cloned()
     }
 
     /// Handle `:time <val>` and `:poll <val>` commands.
@@ -156,83 +131,48 @@ impl App {
         }
     }
 
-    fn save_view(&mut self, view: &str) {
-        self.config.state.view = Some(view.to_string());
+    fn save_query(&mut self, queries: &[String]) {
+        self.config.state.search = Some(queries.to_vec());
         let _ = config::save(&self.config);
     }
 
-    fn ensure_channels_loaded(&mut self) {
-        if !self.channels_loaded {
-            self.channels_loaded = true;
-            match self.client.list_channels() {
-                Ok(channels) => self.all_channels = channels,
-                Err(e) => eprintln!("Error listing channels: {}", e),
-            }
-        }
-    }
-
     fn resolve_initial_source(&mut self) -> MessageSource {
-        if let Some(view) = self.config.state.view.clone() {
-            if let Some(rest) = view.strip_prefix("search ") {
-                let queries = self.resolve_search_handles(rest);
-                if !queries.is_empty() {
-                    return MessageSource::Search(queries);
-                }
-            } else if let Some(rest) = view.strip_prefix("channel ")
-                && let Some(ch) = self.find_channel(rest)
-            {
-                return MessageSource::Channels(vec![ch]);
-            }
-        }
-        MessageSource::Search(vec![format!("<@{}>", self.user_id)])
-    }
+        let mut queries: Vec<String> = self
+            .config
+            .state
+            .search
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|q| !q.trim().is_empty())
+            .collect();
 
-    /// Resolve search handles (users and user groups) into search queries.
-    fn resolve_search_handles(&self, input: &str) -> Vec<String> {
-        let mut queries = Vec::new();
-        for h in input.split_whitespace() {
-            let h = h.trim_start_matches('@');
-            // Try user first
-            if let Some(name) = self.client.find_user_display_name(h)
-                && let Some(id) = self.client.find_user_id(&name)
-            {
-                queries.push(format!("<@{}>", id));
-                continue;
-            }
-            // Try user group
-            if let Some(group_id) = self.client.find_usergroup_id(h) {
-                queries.push(format!("<!subteam^{}>", group_id));
+        if self.config.state.user_pings {
+            let user_query = format!("<@{}>", self.user_id);
+            if !queries.contains(&user_query) {
+                queries.push(user_query);
             }
         }
-        queries
-    }
 
-    /// Collect the display-name / group-handle tokens for saving to config.
-    fn resolve_search_save_names(&self, input: &str) -> Vec<String> {
-        let mut names = Vec::new();
-        for h in input.split_whitespace() {
-            let h = h.trim_start_matches('@');
-            if let Some(name) = self.client.find_user_display_name(h) {
-                names.push(name);
-            } else if self.client.find_usergroup_id(h).is_some() {
-                names.push(h.to_string());
-            }
+        if queries.is_empty() {
+            queries.push(format!("<@{}>", self.user_id));
         }
-        names
+
+        MessageSource::Search(queries)
     }
 
     fn active_show_emojis(&self) -> Vec<String> {
-        let active = &self.active_reactions;
+        let active = &self.active_categories;
         self.config
-            .reactions
+            .categories
             .iter()
             .filter(|(name, _)| active.contains(*name))
-            .map(|(_, emoji)| emoji.clone())
+            .flat_map(|(_, emojis)| emojis.iter().cloned())
             .collect()
     }
 
     fn all_configured_emojis(&self) -> Vec<String> {
-        self.config.reactions.values().cloned().collect()
+        self.config.categories.values().flatten().cloned().collect()
     }
 
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
@@ -266,11 +206,16 @@ impl App {
             // Client-side filtering: show messages that have no configured reaction or at least one active reaction
             let show_emojis = self.active_show_emojis();
             let all_emojis = self.all_configured_emojis();
+            let show_uncategorised = self.show_uncategorised;
             let visible_count = messages
                 .iter()
                 .filter(|m| {
                     let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
-                    configured.is_empty() || configured.iter().any(|e| show_emojis.contains(e))
+                    if configured.is_empty() {
+                        show_uncategorised
+                    } else {
+                        configured.iter().any(|e| show_emojis.contains(e))
+                    }
                 })
                 .count();
 
@@ -278,7 +223,6 @@ impl App {
                 && let Ok(Event::Key(key)) = event::read()
                 && key.kind == KeyEventKind::Press
             {
-                let mut needs_tab_complete = false;
                 if let Some(ref mut buf) = self.command_buf {
                     match key.code {
                         KeyCode::Enter => {
@@ -290,36 +234,12 @@ impl App {
                             if self.handle_config_command(&cmd) {
                                 handled = true;
                             }
-                            if let Some(rest) = cmd.strip_prefix("reaction ") {
-                                let mut parts = rest.split_whitespace();
-                                if let (Some(name), Some(emoji)) = (parts.next(), parts.next()) {
-                                    self.config.reactions.insert(name.to_string(), emoji.to_string());
-                                    let _ = config::save(&self.config);
-                                    handled = true;
-                                }
-                            }
-                            let channel_arg = cmd.strip_prefix("c ").or_else(|| cmd.strip_prefix("channel "));
-                            if let Some(name) = channel_arg
-                                && let Some(ch) = self.find_channel(name)
-                            {
-                                self.save_view(&format!("channel {}", ch.1));
-                                source = MessageSource::Channels(vec![ch]);
-                                messages.clear();
-                                seen.clear();
-                                last_poll = None;
-                                list_state = ListState::default();
-                                poll_generation += 1;
-                                poll_in_flight = false;
-                                poll_fired_this_cycle = false;
-                                drain_start = None;
-                                handled = true;
-                            }
+
                             if let Some(rest) = cmd.strip_prefix("search ") {
-                                let search_queries = self.resolve_search_handles(rest);
-                                if !search_queries.is_empty() {
-                                    let save_names = self.resolve_search_save_names(rest);
-                                    self.save_view(&format!("search {}", save_names.join(" ")));
-                                    source = MessageSource::Search(search_queries);
+                                let queries: Vec<String> = rest.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+                                if !queries.is_empty() {
+                                    self.save_query(&queries);
+                                    source = MessageSource::Search(queries);
                                     messages.clear();
                                     seen.clear();
                                     last_poll = None;
@@ -352,7 +272,7 @@ impl App {
                         KeyCode::Char(c) => {
                             if c == ' ' && !buf.contains(' ') {
                                 let abbrev = buf.as_str();
-                                const COMMANDS: &[&str] = &["channel", "poll", "reaction", "search", "time"];
+                                const COMMANDS: &[&str] = &["poll", "search", "time"];
                                 let matches: Vec<&&str> = COMMANDS.iter().filter(|cmd| cmd.starts_with(abbrev)).collect();
                                 if matches.len() == 1 {
                                     buf.clear();
@@ -362,27 +282,35 @@ impl App {
                             buf.push(c);
                             self.command_error = false;
                         }
-                        KeyCode::Tab => {
-                            needs_tab_complete = true;
-                        }
                         _ => {}
                     }
                 } else {
                     match key.code {
+                        KeyCode::Char('0') => {
+                            pending_g = None;
+                            if pending_o {
+                                self.active_categories.clear();
+                                self.show_uncategorised = true;
+                            } else {
+                                self.show_uncategorised = !self.show_uncategorised;
+                            }
+                            pending_o = false;
+                        }
                         KeyCode::Char(c @ '1'..='9') => {
                             pending_g = None;
                             let idx = (c as u32 - '1' as u32) as usize;
-                            let reaction_names: Vec<String> = self.config.reactions.keys().cloned().collect();
-                            if idx < reaction_names.len() {
+                            let category_names: Vec<String> = self.config.categories.keys().cloned().collect();
+                            if idx < category_names.len() {
                                 if pending_o {
-                                    self.active_reactions.clear();
-                                    self.active_reactions.insert(reaction_names[idx].clone());
+                                    self.active_categories.clear();
+                                    self.active_categories.insert(category_names[idx].clone());
+                                    self.show_uncategorised = false;
                                 } else {
-                                    let name = &reaction_names[idx];
-                                    if self.active_reactions.contains(name) {
-                                        self.active_reactions.remove(name);
+                                    let name = &category_names[idx];
+                                    if self.active_categories.contains(name) {
+                                        self.active_categories.remove(name);
                                     } else {
-                                        self.active_reactions.insert(name.clone());
+                                        self.active_categories.insert(name.clone());
                                     }
                                 }
                             }
@@ -442,7 +370,11 @@ impl App {
                                     .iter()
                                     .filter(|m| {
                                         let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
-                                        configured.is_empty() || configured.iter().any(|e| show_emojis.contains(e))
+                                        if configured.is_empty() {
+                                            show_uncategorised
+                                        } else {
+                                            configured.iter().any(|e| show_emojis.contains(e))
+                                        }
                                     })
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
@@ -459,12 +391,6 @@ impl App {
                             pending_g = None;
                             pending_o = false;
                         }
-                    }
-                }
-                if needs_tab_complete {
-                    self.ensure_channels_loaded();
-                    if let Some(ref mut buf) = self.command_buf {
-                        input::tab_complete_channel(buf, &self.all_channels, &self.user_names);
                     }
                 }
             }
@@ -536,14 +462,16 @@ impl App {
                         return false;
                     }
                     let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
-                    configured.is_empty() || configured.iter().any(|e| show_emojis.contains(e))
+                    if configured.is_empty() {
+                        show_uncategorised
+                    } else {
+                        configured.iter().any(|e| show_emojis.contains(e))
+                    }
                 })
                 .collect();
 
             let command_buf_snapshot = self.command_buf.clone();
             let command_error = self.command_error;
-            let all_channels = &self.all_channels;
-            let user_names = &self.user_names;
             let config = &self.config;
             let poll_state = view::header::PollState {
                 interval: self.poll,
@@ -552,11 +480,8 @@ impl App {
                 drain_elapsed: drain_start.map(|t| t.elapsed()),
             };
             let team_name = &self.team_name;
-            let tracked_channels: &[(String, String)] = match &source {
-                MessageSource::Channels(channels) => channels,
-                MessageSource::Search(_) => &[],
-            };
-            let active_reactions = &self.active_reactions;
+            let active_categories = &self.active_categories;
+            let show_uncategorised = self.show_uncategorised;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -565,15 +490,13 @@ impl App {
                         area,
                         command_buf_snapshot.as_deref(),
                         command_error,
-                        all_channels,
-                        user_names,
                         &visible_messages,
-                        tracked_channels,
                         config,
                         &mut list_state,
                         &poll_state,
                         team_name,
-                        active_reactions,
+                        active_categories,
+                        show_uncategorised,
                     );
                 })
                 .expect("failed to draw");
@@ -587,7 +510,8 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
         if let Some(end) = result[start..].find('>') {
             let inner = &result[start + 2..start + end];
             let user_id = inner.split('|').next().unwrap_or(inner);
-            let name = client.resolve_user(user_id);
+            let user_id_clean = user_id.replace(['\u{E000}', '\u{E001}'], "");
+            let name = client.resolve_user(&user_id_clean);
             result.replace_range(start..start + end + 1, &format!("@{}", name));
         } else {
             break;
@@ -599,80 +523,51 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
 fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) -> Vec<TrackedMessage> {
     let mut results = Vec::new();
     match source {
-        MessageSource::Channels(channels) => {
-            for (channel_id, channel_name) in channels {
-                if let Ok(resp) = client.conversations_history(channel_id, past)
-                    && let Some(msgs) = resp.messages
-                {
-                    for msg in msgs.iter().rev() {
-                        let reaction_emojis: Vec<String> = msg.reactions.iter().map(|r| r.name.clone()).collect();
-                        let user_id = msg.user.as_deref().unwrap_or("unknown");
-                        let display_name = client.resolve_user(user_id);
-                        let raw_text = msg.text.as_deref().unwrap_or("").to_string();
-                        let text = resolve_mentions(client, &raw_text);
-
-                        results.push(TrackedMessage {
-                            channel_id: channel_id.clone(),
-                            channel_name: channel_name.clone(),
-                            ts: msg.ts.clone(),
-                            thread_ts: msg.thread_ts.clone(),
-                            display_name,
-                            text,
-                            reaction_emojis,
-                        });
-                    }
-                }
-            }
-        }
         MessageSource::Search(queries) => {
             let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - past.as_secs_f64();
-            let mut all_matches = Vec::new();
             let mut seen_ts = std::collections::HashSet::new();
             for query in queries {
-                if let Ok(resp) = client.search_messages(query)
-                    && let Some(search_msgs) = resp.messages
-                    && let Some(matches) = search_msgs.matches
+                if let Ok(resp) = client.search_modules_messages(query)
+                    && let Some(items) = resp.items
                 {
-                    for m in matches {
-                        let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
-                        if msg_ts >= oldest && seen_ts.insert(m.ts.clone()) {
-                            all_matches.push(m);
+                    for item in items {
+                        let (channel_id, channel_name) = match &item.channel {
+                            Some(ch) => (ch.id.clone(), ch.name.clone()),
+                            None => ("unknown".to_string(), "unknown".to_string()),
+                        };
+                        if let Some(messages) = item.messages {
+                            for m in messages {
+                                let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
+                                if msg_ts < oldest || !seen_ts.insert(m.ts.clone()) {
+                                    continue;
+                                }
+                                let reaction_emojis: Vec<String> = m.reactions.iter().map(|r| r.name.clone()).collect();
+                                let user_id_str = m.user.as_deref().unwrap_or("unknown");
+                                let display_name = client.resolve_user(user_id_str);
+                                let raw_text = m.text.as_deref().unwrap_or("").to_string();
+                                let text = resolve_mentions(client, &raw_text);
+
+                                let thread_ts = m.thread_ts.clone().or_else(|| {
+                                    m.permalink.as_deref().and_then(|p| {
+                                        p.split('?')
+                                            .nth(1)
+                                            .and_then(|qs| qs.split('&').find_map(|param| param.strip_prefix("thread_ts=").map(String::from)))
+                                    })
+                                });
+
+                                results.push(TrackedMessage {
+                                    channel_id: channel_id.clone(),
+                                    channel_name: channel_name.clone(),
+                                    ts: m.ts.clone(),
+                                    thread_ts,
+                                    display_name,
+                                    text,
+                                    reaction_emojis,
+                                });
+                            }
                         }
                     }
                 }
-            }
-            for m in &all_matches {
-                let (channel_id, channel_name) = match &m.channel {
-                    Some(ch) => (ch.id.clone(), ch.name.clone()),
-                    None => ("unknown".to_string(), "unknown".to_string()),
-                };
-                let reaction_emojis: Vec<String> = if let Ok(rr) = client.reactions_get(&channel_id, &m.ts)
-                    && let Some(msg) = &rr.message
-                {
-                    msg.reactions.iter().map(|r| r.name.clone()).collect()
-                } else {
-                    Vec::new()
-                };
-                let user_id_str = m.user.as_deref().unwrap_or("unknown");
-                let display_name = client.resolve_user(user_id_str);
-                let raw_text = m.text.as_deref().unwrap_or("").to_string();
-                let text = resolve_mentions(client, &raw_text);
-
-                let thread_ts = m.permalink.as_deref().and_then(|p| {
-                    p.split('?')
-                        .nth(1)
-                        .and_then(|qs| qs.split('&').find_map(|param| param.strip_prefix("thread_ts=").map(String::from)))
-                });
-
-                results.push(TrackedMessage {
-                    channel_id,
-                    channel_name,
-                    ts: m.ts.clone(),
-                    thread_ts,
-                    display_name,
-                    text,
-                    reaction_emojis,
-                });
             }
         }
     }

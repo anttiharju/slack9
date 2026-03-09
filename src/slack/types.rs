@@ -15,22 +15,6 @@ pub struct AuthTestResponse {
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct ConversationsListResponse {
-    pub ok: bool,
-    pub channels: Option<Vec<Channel>>,
-    pub response_metadata: Option<ResponseMetadata>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct Channel {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct ResponseMetadata {
     pub next_cursor: Option<String>,
 }
@@ -61,28 +45,6 @@ pub struct UserProfile {
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct ConversationsHistoryResponse {
-    pub ok: bool,
-    pub messages: Option<Vec<Message>>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct Message {
-    pub ts: String,
-    pub thread_ts: Option<String>,
-    pub user: Option<String>,
-    pub text: Option<String>,
-    #[serde(rename = "type")]
-    pub msg_type: Option<String>,
-    pub subtype: Option<String>,
-    #[serde(default)]
-    pub reactions: Vec<Reaction>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
 pub struct Reaction {
     pub name: String,
     pub count: Option<u32>,
@@ -91,29 +53,29 @@ pub struct Reaction {
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct SearchMessagesResponse {
+pub struct SearchModulesMessagesResponse {
     pub ok: bool,
-    pub messages: Option<SearchMessages>,
+    pub items: Option<Vec<SearchModulesItem>>,
     pub error: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct SearchMessages {
-    pub matches: Option<Vec<SearchMatch>>,
-    pub total: Option<u32>,
+pub struct SearchModulesItem {
+    pub channel: Option<SearchChannel>,
+    pub messages: Option<Vec<SearchModulesMessage>>,
 }
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
-pub struct SearchMatch {
+pub struct SearchModulesMessage {
     pub ts: String,
-    pub text: Option<String>,
     pub user: Option<String>,
+    pub text: Option<String>,
     pub permalink: Option<String>,
-    pub channel: Option<SearchChannel>,
     #[serde(default)]
     pub reactions: Vec<Reaction>,
+    pub thread_ts: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,36 +83,4 @@ pub struct SearchMatch {
 pub struct SearchChannel {
     pub id: String,
     pub name: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct ReactionsGetResponse {
-    pub ok: bool,
-    pub message: Option<ReactionsGetMessage>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct ReactionsGetMessage {
-    #[serde(default)]
-    pub reactions: Vec<Reaction>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct UsergroupsListResponse {
-    pub ok: bool,
-    pub usergroups: Option<Vec<Usergroup>>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[allow(dead_code)]
-pub struct Usergroup {
-    pub id: String,
-    pub handle: String,
-    #[serde(default)]
-    pub users: Vec<String>,
 }

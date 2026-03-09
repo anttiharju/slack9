@@ -16,15 +16,13 @@ pub fn render(
     area: Rect,
     command_buf: Option<&str>,
     command_error: bool,
-    all_channels: &[(String, String)],
-    user_names: &[String],
     messages: &[&TrackedMessage],
-    tracked_channels: &[(String, String)],
     config: &Config,
     list_state: &mut ListState,
     poll: &header::PollState,
     team_name: &str,
-    active_reactions: &HashSet<String>,
+    active_categories: &HashSet<String>,
+    show_uncategorised: bool,
 ) {
     let has_overlay = command_buf.is_some();
 
@@ -65,47 +63,40 @@ pub fn render(
     let (overlay_area, list_area) = if has_overlay { (Some(chunks[0]), chunks[1]) } else { (None, chunks[0]) };
 
     if let Some(overlay_area) = overlay_area {
-        command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), command_error, all_channels, user_names);
+        command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), command_error);
     }
 
     let items: Vec<ListItem> = messages
         .iter()
         .map(|m| {
-            let spans = vec![
+            let mut spans = vec![
                 Span::styled(format!("#{} ", m.channel_name), Style::default().fg(Color::DarkGray)),
                 Span::styled(format!("@{}", m.display_name), Style::default().fg(Color::Rgb(255, 165, 0))),
-                Span::raw(format!(": {}", m.text)),
+                Span::raw(": "),
             ];
+            spans.extend(highlight_spans(&m.text));
             ListItem::new(Line::from(spans))
         })
         .collect();
 
-    let view_label = if tracked_channels.is_empty() {
-        "search".to_string()
-    } else {
-        tracked_channels
-            .iter()
-            .map(|(_, name)| format!("#{}", name))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
+    let title = " search ".to_string();
 
-    let title = format!(" {} ", view_label);
-
-    // Build bottom title for reaction toggles
-    let reaction_names: Vec<&String> = config.reactions.keys().collect();
-    let bottom_title = if reaction_names.is_empty() {
+    // Build bottom title for category toggles
+    let category_names: Vec<&String> = config.categories.keys().collect();
+    let bottom_title = if category_names.is_empty() {
         String::new()
     } else {
-        let toggles: Vec<String> = reaction_names
+        let mut toggles: Vec<String> = category_names
             .iter()
             .enumerate()
             .map(|(i, name)| {
-                let check = if active_reactions.contains(*name) { "x" } else { " " };
+                let check = if active_categories.contains(*name) { "x" } else { " " };
                 format!("{}) {} [{}]", i + 1, name, check)
             })
             .collect();
-        format!(" show messages with reactions for: {} ", toggles.join(" "))
+        let uncategorised_check = if show_uncategorised { "x" } else { " " };
+        toggles.push(format!("0) uncategorised [{}]", uncategorised_check));
+        format!(" show categories: {} ", toggles.join(" "))
     };
 
     let list_border_color = if has_overlay { Color::Blue } else { Color::Cyan };
@@ -123,4 +114,28 @@ pub fn render(
         .highlight_symbol("> ");
 
     frame.render_stateful_widget(list, list_area, list_state);
+}
+
+/// Parse \u{E000}...\u{E001} highlight markers in text and return spans
+/// with matched portions styled in orange.
+fn highlight_spans(text: &str) -> Vec<Span<'_>> {
+    let mut spans = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('\u{E000}') {
+        if start > 0 {
+            spans.push(Span::raw(&rest[..start]));
+        }
+        rest = &rest[start + '\u{E000}'.len_utf8()..];
+        if let Some(end) = rest.find('\u{E001}') {
+            spans.push(Span::styled(
+                &rest[..end],
+                Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
+            ));
+            rest = &rest[end + '\u{E001}'.len_utf8()..];
+        }
+    }
+    if !rest.is_empty() {
+        spans.push(Span::raw(rest));
+    }
+    spans
 }

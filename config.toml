@@ -1,8 +1,8 @@
-[header]
-past = "24h"
-poll = "10s"
-
-[reactions]
-wip = "eyes"
+[categories]
 blocked = "hourglass"
 completed = "white_check_mark"
+wip = ["eyes", "writing_hand"]
+
+[state]
+user_pings = true
+search = ["help", "me"]
