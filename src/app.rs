@@ -129,14 +129,14 @@ impl App {
         }
     }
 
-    fn save_view(&mut self, view: &str) {
-        self.config.state.view = Some(view.to_string());
+    fn save_query(&mut self, query: &str) {
+        self.config.state.query = Some(query.to_string());
         let _ = config::save(&self.config);
     }
 
     fn resolve_initial_source(&mut self) -> MessageSource {
-        if let Some(view) = self.config.state.view.clone()
-            && let Some(rest) = view.strip_prefix("search ")
+        if let Some(query) = self.config.state.query.clone()
+            && let Some(rest) = query.strip_prefix("search ")
         {
             let queries = self.resolve_search_handles(rest);
             if !queries.is_empty() {
@@ -253,7 +253,7 @@ impl App {
                                 let search_queries = self.resolve_search_handles(rest);
                                 if !search_queries.is_empty() {
                                     let save_names = self.resolve_search_save_names(rest);
-                                    self.save_view(&format!("search {}", save_names.join(" ")));
+                                    self.save_query(&format!("search {}", save_names.join(" ")));
                                     source = MessageSource::Search(search_queries);
                                     messages.clear();
                                     seen.clear();
