@@ -536,7 +536,8 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
         if let Some(end) = result[start..].find('>') {
             let inner = &result[start + 2..start + end];
             let user_id = inner.split('|').next().unwrap_or(inner);
-            let name = client.resolve_user(user_id);
+            let user_id_clean = user_id.replace(['\u{E000}', '\u{E001}'], "");
+            let name = client.resolve_user(&user_id_clean);
             result.replace_range(start..start + end + 1, &format!("@{}", name));
         } else {
             break;

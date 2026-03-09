@@ -69,11 +69,12 @@ pub fn render(
     let items: Vec<ListItem> = messages
         .iter()
         .map(|m| {
-            let spans = vec![
+            let mut spans = vec![
                 Span::styled(format!("#{} ", m.channel_name), Style::default().fg(Color::DarkGray)),
                 Span::styled(format!("@{}", m.display_name), Style::default().fg(Color::Rgb(255, 165, 0))),
-                Span::raw(format!(": {}", m.text)),
+                Span::raw(": "),
             ];
+            spans.extend(highlight_spans(&m.text));
             ListItem::new(Line::from(spans))
         })
         .collect();
@@ -113,4 +114,28 @@ pub fn render(
         .highlight_symbol("> ");
 
     frame.render_stateful_widget(list, list_area, list_state);
+}
+
+/// Parse \u{E000}...\u{E001} highlight markers in text and return spans
+/// with matched portions styled in orange.
+fn highlight_spans(text: &str) -> Vec<Span<'_>> {
+    let mut spans = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find('\u{E000}') {
+        if start > 0 {
+            spans.push(Span::raw(&rest[..start]));
+        }
+        rest = &rest[start + '\u{E000}'.len_utf8()..];
+        if let Some(end) = rest.find('\u{E001}') {
+            spans.push(Span::styled(
+                &rest[..end],
+                Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
+            ));
+            rest = &rest[end + '\u{E001}'.len_utf8()..];
+        }
+    }
+    if !rest.is_empty() {
+        spans.push(Span::raw(rest));
+    }
+    spans
 }
