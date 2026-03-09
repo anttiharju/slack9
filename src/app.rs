@@ -308,8 +308,13 @@ impl App {
                     match key.code {
                         KeyCode::Char('0') => {
                             pending_g = None;
+                            if pending_o {
+                                self.active_categories.clear();
+                                self.show_uncategorised = true;
+                            } else {
+                                self.show_uncategorised = !self.show_uncategorised;
+                            }
                             pending_o = false;
-                            self.show_uncategorised = !self.show_uncategorised;
                         }
                         KeyCode::Char(c @ '1'..='9') => {
                             pending_g = None;
@@ -319,6 +324,7 @@ impl App {
                                 if pending_o {
                                     self.active_categories.clear();
                                     self.active_categories.insert(category_names[idx].clone());
+                                    self.show_uncategorised = false;
                                 } else {
                                     let name = &category_names[idx];
                                     if self.active_categories.contains(name) {
