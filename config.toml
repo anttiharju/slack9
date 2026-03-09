@@ -5,4 +5,4 @@ wip = ["eyes", "writing_hand"]
 
 [state]
 user_pings = false
-search = "help"
+wip = ["help", "me"]
