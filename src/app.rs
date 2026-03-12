@@ -666,7 +666,14 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
                 {
                     for item in items {
                         let (channel_id, channel_name) = match &item.channel {
-                            Some(ch) => (ch.id.clone(), ch.name.clone()),
+                            Some(ch) => {
+                                let name = if is_user_id(&ch.name) {
+                                    client.resolve_user(&ch.name)
+                                } else {
+                                    ch.name.clone()
+                                };
+                                (ch.id.clone(), name)
+                            }
                             None => ("unknown".to_string(), "unknown".to_string()),
                         };
                         if let Some(messages) = item.messages {
@@ -685,14 +692,13 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
                                 }
 
                                 // For user_pings query, only keep messages that mention @user_name
-                                if is_user_ping_query
-                                    && let Some((_, user_name)) = user_ping_filter {
-                                        let at_user = format!("@{}", user_name);
-                                        let text_clean = text.replace(['\u{E000}', '\u{E001}'], "");
-                                        if !text_clean.contains(&at_user) {
-                                            continue;
-                                        }
+                                if is_user_ping_query && let Some((_, user_name)) = user_ping_filter {
+                                    let at_user = format!("@{}", user_name);
+                                    let text_clean = text.replace(['\u{E000}', '\u{E001}'], "");
+                                    if !text_clean.contains(&at_user) {
+                                        continue;
                                     }
+                                }
 
                                 let thread_ts = m.thread_ts.clone().or_else(|| {
                                     m.permalink.as_deref().and_then(|p| {
@@ -720,4 +726,9 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
     }
     results.sort_by(|a, b| a.ts.partial_cmp(&b.ts).unwrap_or(std::cmp::Ordering::Equal));
     results
+}
+
+/// Check if a string looks like a Slack user ID (e.g. "U05315SPC9Y").
+fn is_user_id(s: &str) -> bool {
+    s.len() > 1 && s.starts_with('U') && s[1..].chars().all(|c| c.is_ascii_alphanumeric())
 }
