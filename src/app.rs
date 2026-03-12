@@ -81,7 +81,6 @@ impl App {
             None => config.categories.keys().cloned().collect(),
         };
         let show_uncategorised = config.state.show_uncategorised;
-        let channel_filter = config.state.channel_filter.clone();
 
         Self {
             client: Arc::new(client),
@@ -94,7 +93,7 @@ impl App {
             command_buf: None,
             command_error: false,
             filter_buf: None,
-            channel_filter,
+            channel_filter: None,
             past,
             poll,
             active_categories,
@@ -154,11 +153,6 @@ impl App {
     fn save_category_state(&mut self) {
         self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
         self.config.state.show_uncategorised = self.show_uncategorised;
-        let _ = config::save(&self.config);
-    }
-
-    fn save_channel_filter(&mut self) {
-        self.config.state.channel_filter = self.channel_filter.clone();
         let _ = config::save(&self.config);
     }
 
@@ -304,16 +298,19 @@ impl App {
                                 self.channel_filter = Some(filter);
                             }
                             self.filter_buf = None;
-                            self.save_channel_filter();
                             list_state = ListState::default();
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
+                            self.channel_filter = None;
                             self.filter_buf = None;
+                            list_state = ListState::default();
                         }
                         KeyCode::Backspace => {
                             buf.pop();
                             if buf.is_empty() {
+                                self.channel_filter = None;
                                 self.filter_buf = None;
+                                list_state = ListState::default();
                             }
                         }
                         KeyCode::Char(c) => {

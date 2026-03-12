@@ -17,7 +17,7 @@ pub fn render(
     command_buf: Option<&str>,
     command_error: bool,
     filter_buf: Option<&str>,
-    _channel_filter: Option<&str>,
+    channel_filter: Option<&str>,
     all_messages: &[&TrackedMessage],
     messages: &[&TrackedMessage],
     config: &Config,
@@ -28,7 +28,8 @@ pub fn render(
     active_categories: &HashSet<String>,
     show_uncategorised: bool,
 ) {
-    let has_overlay = command_buf.is_some() || filter_buf.is_some();
+    let has_filter_visible = filter_buf.is_some() || channel_filter.is_some_and(|f| !f.is_empty());
+    let has_overlay = command_buf.is_some() || has_filter_visible;
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
@@ -79,11 +80,14 @@ pub fn render(
     let (overlay_area, list_area) = if has_overlay { (Some(chunks[0]), chunks[1]) } else { (None, chunks[0]) };
 
     if let Some(overlay_area) = overlay_area {
-        if let Some(fbuf) = filter_buf {
-            filter_bar::render(frame, overlay_area, fbuf);
-        } else {
-            command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), command_error);
-        }
+        if let Some(cbuf) = command_buf {
+            command_bar::render(frame, overlay_area, cbuf, command_error);
+        } else if let Some(fbuf) = filter_buf {
+            filter_bar::render(frame, overlay_area, fbuf, true);
+        } else if let Some(cf) = channel_filter
+            && !cf.is_empty() {
+                filter_bar::render(frame, overlay_area, cf, false);
+            }
     }
 
     let items: Vec<ListItem> = messages
