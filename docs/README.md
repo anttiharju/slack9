@@ -29,7 +29,7 @@ brew install anttiharju/tap/slack9
 
 Or download a binary from GitHub releases.
 
-Also available via Nix at https://github.com/anttiharju/nur-packages.
+Also available via Nix at https://github.com/anttiharju/nur-packages
 
 ## Usage
 
