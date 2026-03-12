@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding};
 use std::collections::HashSet;
 
-use super::{command_bar, header};
+use super::{command_bar, filter_bar, header};
 use crate::cli;
 
 #[allow(clippy::too_many_arguments)]
@@ -16,6 +16,8 @@ pub fn render(
     area: Rect,
     command_buf: Option<&str>,
     command_error: bool,
+    filter_buf: Option<&str>,
+    channel_filter: Option<&str>,
     messages: &[&TrackedMessage],
     config: &Config,
     list_state: &mut ListState,
@@ -25,7 +27,7 @@ pub fn render(
     active_categories: &HashSet<String>,
     show_uncategorised: bool,
 ) {
-    let has_overlay = command_buf.is_some();
+    let has_overlay = command_buf.is_some() || filter_buf.is_some();
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
@@ -50,6 +52,11 @@ pub fn render(
         spans.push(Span::styled(format!(" :{}", prefix), Style::default().fg(Color::White)));
         spans.push(Span::styled(rest, Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)));
     }
+    spans.push(Span::styled(" /", Style::default().fg(Color::White)));
+    spans.push(Span::styled(
+        "#channel",
+        Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+    ));
     let commands_line = Line::from(spans);
     let cmd_area = Rect::new(outer[0].x, outer[0].bottom().saturating_sub(1), outer[0].width, 1);
     frame.render_widget(ratatui::widgets::Paragraph::new(commands_line), cmd_area);
@@ -71,7 +78,11 @@ pub fn render(
     let (overlay_area, list_area) = if has_overlay { (Some(chunks[0]), chunks[1]) } else { (None, chunks[0]) };
 
     if let Some(overlay_area) = overlay_area {
-        command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), command_error);
+        if let Some(fbuf) = filter_buf {
+            filter_bar::render(frame, overlay_area, fbuf);
+        } else {
+            command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), command_error);
+        }
     }
 
     let items: Vec<ListItem> = messages
@@ -87,7 +98,11 @@ pub fn render(
         })
         .collect();
 
-    let title = " search ".to_string();
+    let active_filter = filter_buf.or(channel_filter);
+    let title = match active_filter {
+        Some(f) if !f.is_empty() => format!(" search (/#{})", f),
+        _ => " search ".to_string(),
+    };
 
     // Build bottom title for category toggles
     let category_names: Vec<&String> = config.categories.keys().collect();

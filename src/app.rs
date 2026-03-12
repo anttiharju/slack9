@@ -36,6 +36,8 @@ pub struct App {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
     command_error: bool,
+    filter_buf: Option<String>,
+    channel_filter: Option<String>,
     past: Duration,
     poll: Duration,
     active_categories: HashSet<String>,
@@ -79,6 +81,7 @@ impl App {
             None => config.categories.keys().cloned().collect(),
         };
         let show_uncategorised = config.state.show_uncategorised;
+        let channel_filter = config.state.channel_filter.clone();
 
         Self {
             client: Arc::new(client),
@@ -90,6 +93,8 @@ impl App {
             terminal,
             command_buf: None,
             command_error: false,
+            filter_buf: None,
+            channel_filter,
             past,
             poll,
             active_categories,
@@ -154,6 +159,11 @@ impl App {
     fn save_category_state(&mut self) {
         self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
         self.config.state.show_uncategorised = self.show_uncategorised;
+        let _ = config::save(&self.config);
+    }
+
+    fn save_channel_filter(&mut self) {
+        self.config.state.channel_filter = self.channel_filter.clone();
         let _ = config::save(&self.config);
     }
 
@@ -227,9 +237,16 @@ impl App {
             let categories = self.config.categories.clone();
             let show_uncategorised = self.show_uncategorised;
             let active_categories = self.active_categories.clone();
+            let effective_channel_filter = self.filter_buf.as_deref().or(self.channel_filter.as_deref());
             let visible_count = messages
                 .iter()
-                .filter(|m| is_message_visible(m, &categories, &active_categories, show_uncategorised))
+                .filter(|m| {
+                    if let Some(f) = effective_channel_filter
+                        && !f.is_empty() && !m.channel_name.to_lowercase().contains(&f.to_lowercase()) {
+                            return false;
+                        }
+                    is_message_visible(m, &categories, &active_categories, show_uncategorised)
+                })
                 .count();
 
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
@@ -297,6 +314,33 @@ impl App {
                         }
                         _ => {}
                     }
+                } else if let Some(ref mut buf) = self.filter_buf {
+                    match key.code {
+                        KeyCode::Enter => {
+                            let filter = buf.trim().to_string();
+                            if filter.is_empty() {
+                                self.channel_filter = None;
+                            } else {
+                                self.channel_filter = Some(filter);
+                            }
+                            self.filter_buf = None;
+                            self.save_channel_filter();
+                            list_state = ListState::default();
+                        }
+                        KeyCode::Esc | KeyCode::Char('\x03') => {
+                            self.filter_buf = None;
+                        }
+                        KeyCode::Backspace => {
+                            buf.pop();
+                            if buf.is_empty() {
+                                self.filter_buf = None;
+                            }
+                        }
+                        KeyCode::Char(c) => {
+                            buf.push(c);
+                        }
+                        _ => {}
+                    }
                 } else {
                     match key.code {
                         KeyCode::Char('0') => {
@@ -339,6 +383,11 @@ impl App {
                             pending_g = None;
                             pending_o = false;
                             self.command_buf = Some(String::new());
+                        }
+                        KeyCode::Char('/') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.filter_buf = Some(self.channel_filter.clone().unwrap_or_default());
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
                             pending_g = None;
@@ -464,6 +513,7 @@ impl App {
 
             // Build filtered visible messages for rendering
             let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - self.past.as_secs_f64();
+            let effective_channel_filter = self.filter_buf.as_deref().or(self.channel_filter.as_deref());
             let visible_messages: Vec<&TrackedMessage> = messages
                 .iter()
                 .filter(|m| {
@@ -471,12 +521,18 @@ impl App {
                     if msg_ts < oldest {
                         return false;
                     }
+                    if let Some(f) = effective_channel_filter
+                        && !f.is_empty() && !m.channel_name.to_lowercase().contains(&f.to_lowercase()) {
+                            return false;
+                        }
                     is_message_visible(m, &categories, &active_categories, show_uncategorised)
                 })
                 .collect();
 
             let command_buf_snapshot = self.command_buf.clone();
             let command_error = self.command_error;
+            let filter_buf_snapshot = self.filter_buf.clone();
+            let channel_filter_snapshot = self.channel_filter.clone();
             let config = &self.config;
             let poll_state = view::header::PollState {
                 interval: self.poll,
@@ -496,6 +552,8 @@ impl App {
                         area,
                         command_buf_snapshot.as_deref(),
                         command_error,
+                        filter_buf_snapshot.as_deref(),
+                        channel_filter_snapshot.as_deref(),
                         &visible_messages,
                         config,
                         &mut list_state,
