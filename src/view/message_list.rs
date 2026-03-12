@@ -17,7 +17,7 @@ pub fn render(
     command_buf: Option<&str>,
     command_error: bool,
     filter_buf: Option<&str>,
-    _channel_filter: Option<&str>,
+    channel_filter: Option<&str>,
     all_messages: &[&TrackedMessage],
     messages: &[&TrackedMessage],
     config: &Config,
@@ -28,7 +28,9 @@ pub fn render(
     active_categories: &HashSet<String>,
     show_uncategorised: bool,
 ) {
-    let has_overlay = command_buf.is_some() || filter_buf.is_some();
+    let has_filter_visible = filter_buf.is_some() || channel_filter.is_some_and(|f| !f.is_empty());
+    let has_command = command_buf.is_some();
+    let overlay_count = has_filter_visible as u16 + has_command as u16;
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
@@ -64,25 +66,33 @@ pub fn render(
 
     let content_area = outer[1];
 
-    let chunks = if has_overlay {
-        Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(1)])
-            .split(content_area)
-    } else {
-        Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(1)])
-            .split(content_area)
-    };
+    let mut overlay_constraints: Vec<Constraint> = Vec::new();
+    for _ in 0..overlay_count {
+        overlay_constraints.push(Constraint::Length(3));
+    }
+    overlay_constraints.push(Constraint::Min(1));
 
-    let (overlay_area, list_area) = if has_overlay { (Some(chunks[0]), chunks[1]) } else { (None, chunks[0]) };
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(overlay_constraints)
+        .split(content_area);
 
-    if let Some(overlay_area) = overlay_area {
+    let list_area = chunks[overlay_count as usize];
+
+    // Render overlay bars
+    let mut overlay_idx: usize = 0;
+    if let Some(cbuf) = command_buf {
+        command_bar::render(frame, chunks[overlay_idx], cbuf, command_error);
+        overlay_idx += 1;
+    }
+    if has_filter_visible {
+        let area = chunks[overlay_idx];
         if let Some(fbuf) = filter_buf {
-            filter_bar::render(frame, overlay_area, fbuf);
-        } else {
-            command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), command_error);
+            filter_bar::render(frame, area, fbuf, true);
+        } else if let Some(cf) = channel_filter
+            && !cf.is_empty()
+        {
+            filter_bar::render(frame, area, cf, false);
         }
     }
 
@@ -148,7 +158,7 @@ pub fn render(
         format!(" show categories: {} ", toggles.join(" "))
     };
 
-    let list_border_color = if has_overlay { Color::Blue } else { Color::Cyan };
+    let list_border_color = if overlay_count > 0 { Color::Blue } else { Color::Cyan };
     let mut block = Block::default()
         .title(title)
         .borders(Borders::ALL)

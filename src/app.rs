@@ -17,7 +17,6 @@ use std::time::{Duration, Instant};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 enum TrackResult {
-    Restart,
     Quit,
 }
 
@@ -81,7 +80,6 @@ impl App {
             None => config.categories.keys().cloned().collect(),
         };
         let show_uncategorised = config.state.show_uncategorised;
-        let channel_filter = config.state.channel_filter.clone();
 
         Self {
             client: Arc::new(client),
@@ -94,7 +92,7 @@ impl App {
             command_buf: None,
             command_error: false,
             filter_buf: None,
-            channel_filter,
+            channel_filter: None,
             past,
             poll,
             active_categories,
@@ -118,7 +116,7 @@ impl App {
 
         let default_source = self.resolve_initial_source();
 
-        while let TrackResult::Restart = self.track(default_source.clone()) {}
+        self.track(default_source);
     }
 
     /// Handle `:time <val>` and `:poll <val>` commands.
@@ -154,11 +152,6 @@ impl App {
     fn save_category_state(&mut self) {
         self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
         self.config.state.show_uncategorised = self.show_uncategorised;
-        let _ = config::save(&self.config);
-    }
-
-    fn save_channel_filter(&mut self) {
-        self.config.state.channel_filter = self.channel_filter.clone();
         let _ = config::save(&self.config);
     }
 
@@ -304,16 +297,19 @@ impl App {
                                 self.channel_filter = Some(filter);
                             }
                             self.filter_buf = None;
-                            self.save_channel_filter();
                             list_state = ListState::default();
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
+                            self.channel_filter = None;
                             self.filter_buf = None;
+                            list_state = ListState::default();
                         }
                         KeyCode::Backspace => {
                             buf.pop();
                             if buf.is_empty() {
+                                self.channel_filter = None;
                                 self.filter_buf = None;
+                                list_state = ListState::default();
                             }
                         }
                         KeyCode::Char(c) => {
@@ -412,7 +408,15 @@ impl App {
                             if let Some(selected) = list_state.selected() {
                                 let visible: Vec<&TrackedMessage> = messages
                                     .iter()
-                                    .filter(|m| is_message_visible(m, &categories, &active_categories, show_uncategorised))
+                                    .filter(|m| {
+                                        if let Some(f) = effective_channel_filter
+                                            && !f.is_empty()
+                                            && !m.channel_name.to_lowercase().contains(&f.to_lowercase())
+                                        {
+                                            return false;
+                                        }
+                                        is_message_visible(m, &categories, &active_categories, show_uncategorised)
+                                    })
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
                                     let link_ts = msg.thread_ts.as_deref().unwrap_or(&msg.ts);
@@ -422,7 +426,10 @@ impl App {
                             }
                         }
                         KeyCode::Esc => {
-                            return TrackResult::Restart;
+                            if self.channel_filter.is_some() {
+                                self.channel_filter = None;
+                                list_state = ListState::default();
+                            }
                         }
                         _ => {
                             pending_g = None;
