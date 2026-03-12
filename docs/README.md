@@ -107,7 +107,7 @@ active_categories = []
 show_uncategorised = true
 ```
 
-Duration values support `s`, `m`, `h`, `d`, `w`, `M` (e.g., `7d`, `2h30m`).
+Duration values support `s`, `m`, `h`, `d`, `w`, `M` (e.g., `7d`, `2h`).
 
 ## Keybindings
 

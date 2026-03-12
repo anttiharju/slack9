@@ -35,6 +35,7 @@ pub struct App {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
     command_error: bool,
+    command_error_msg: Option<String>,
     filter_buf: Option<String>,
     channel_filter: Option<String>,
     past: Duration,
@@ -91,6 +92,7 @@ impl App {
             terminal,
             command_buf: None,
             command_error: false,
+            command_error_msg: None,
             filter_buf: None,
             channel_filter: None,
             past,
@@ -120,8 +122,9 @@ impl App {
     }
 
     /// Handle `:time <val>` and `:poll <val>` commands.
-    /// Returns true if the command was recognized and handled.
-    fn handle_config_command(&mut self, cmd: &str) -> bool {
+    /// Returns Ok(true) if recognized and valid, Ok(false) if unrecognized,
+    /// Err(msg) if recognized but invalid.
+    fn handle_config_command(&mut self, cmd: &str) -> Result<bool, String> {
         if let Some(val) = cmd.strip_prefix("time ") {
             let val = val.trim();
             match config::validate_duration(val) {
@@ -129,10 +132,10 @@ impl App {
                     self.config.header.past = val.to_string();
                     self.past = d;
                     let _ = config::save(&self.config);
+                    Ok(true)
                 }
-                Err(e) => eprintln!("Invalid past duration: {}", e),
+                Err(e) => Err(format!("Invalid duration: {}", e)),
             }
-            true
         } else if let Some(val) = cmd.strip_prefix("poll ") {
             let val = val.trim();
             match config::validate_duration(val) {
@@ -140,12 +143,12 @@ impl App {
                     self.config.header.poll = val.to_string();
                     self.poll = d;
                     let _ = config::save(&self.config);
+                    Ok(true)
                 }
-                Err(e) => eprintln!("Invalid poll duration: {}", e),
+                Err(e) => Err(format!("Invalid duration: {}", e)),
             }
-            true
         } else {
-            false
+            Ok(false)
         }
     }
 
@@ -247,23 +250,29 @@ impl App {
                     match key.code {
                         KeyCode::Enter => {
                             let cmd = buf.trim().to_string();
-                            let mut handled = false;
                             if cmd == "q" || cmd == "q!" || cmd == "quit" {
                                 return TrackResult::Quit;
                             }
-                            if self.handle_config_command(&cmd) {
-                                handled = true;
-                            }
-                            if handled {
-                                self.command_buf = None;
-                                self.command_error = false;
-                            } else {
-                                self.command_error = true;
+                            match self.handle_config_command(&cmd) {
+                                Ok(true) => {
+                                    self.command_buf = None;
+                                    self.command_error = false;
+                                    self.command_error_msg = None;
+                                }
+                                Ok(false) => {
+                                    self.command_error = true;
+                                    self.command_error_msg = Some("Unknown command".to_string());
+                                }
+                                Err(e) => {
+                                    self.command_error = true;
+                                    self.command_error_msg = Some(e);
+                                }
                             }
                         }
                         KeyCode::Esc | KeyCode::Char('\x03') => {
                             self.command_buf = None;
                             self.command_error = false;
+                            self.command_error_msg = None;
                         }
                         KeyCode::Backspace => {
                             buf.pop();
@@ -271,6 +280,7 @@ impl App {
                                 self.command_buf = None;
                             }
                             self.command_error = false;
+                            self.command_error_msg = None;
                         }
                         KeyCode::Char(c) => {
                             if c == ' ' && !buf.contains(' ') {
@@ -284,6 +294,7 @@ impl App {
                             }
                             buf.push(c);
                             self.command_error = false;
+                            self.command_error_msg = None;
                         }
                         _ => {}
                     }
@@ -527,6 +538,7 @@ impl App {
 
             let command_buf_snapshot = self.command_buf.clone();
             let command_error = self.command_error;
+            let command_error_msg = self.command_error_msg.clone();
             let filter_buf_snapshot = self.filter_buf.clone();
             let channel_filter_snapshot = self.channel_filter.clone();
             let config = &self.config;
@@ -548,6 +560,7 @@ impl App {
                         area,
                         command_buf_snapshot.as_deref(),
                         command_error,
+                        command_error_msg.as_deref(),
                         filter_buf_snapshot.as_deref(),
                         channel_filter_snapshot.as_deref(),
                         &all_messages,

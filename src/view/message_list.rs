@@ -16,6 +16,7 @@ pub fn render(
     area: Rect,
     command_buf: Option<&str>,
     command_error: bool,
+    command_error_msg: Option<&str>,
     filter_buf: Option<&str>,
     channel_filter: Option<&str>,
     all_messages: &[&TrackedMessage],
@@ -30,7 +31,7 @@ pub fn render(
 ) {
     let has_filter_visible = filter_buf.is_some() || channel_filter.is_some_and(|f| !f.is_empty());
     let has_command = command_buf.is_some();
-    let overlay_count = has_filter_visible as u16 + has_command as u16;
+    let command_bar_height: u16 = if has_command && command_error_msg.is_some() { 4 } else { 3 };
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
@@ -67,22 +68,26 @@ pub fn render(
     let content_area = outer[1];
 
     let mut overlay_constraints: Vec<Constraint> = Vec::new();
-    for _ in 0..overlay_count {
+    if has_command {
+        overlay_constraints.push(Constraint::Length(command_bar_height));
+    }
+    if has_filter_visible {
         overlay_constraints.push(Constraint::Length(3));
     }
     overlay_constraints.push(Constraint::Min(1));
 
+    let overlay_count = has_command as usize + has_filter_visible as usize;
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints(overlay_constraints)
         .split(content_area);
 
-    let list_area = chunks[overlay_count as usize];
+    let list_area = chunks[overlay_count];
 
     // Render overlay bars
     let mut overlay_idx: usize = 0;
     if let Some(cbuf) = command_buf {
-        command_bar::render(frame, chunks[overlay_idx], cbuf, command_error);
+        command_bar::render(frame, chunks[overlay_idx], cbuf, command_error, command_error_msg);
         overlay_idx += 1;
     }
     if has_filter_visible {
