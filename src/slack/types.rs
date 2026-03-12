@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use serde_json::Value;
 
 #[derive(Debug, Deserialize)]
 #[allow(dead_code)]
@@ -76,6 +77,46 @@ pub struct SearchModulesMessage {
     #[serde(default)]
     pub reactions: Vec<Reaction>,
     pub thread_ts: Option<String>,
+    #[serde(default)]
+    pub blocks: Vec<Value>,
+}
+
+impl SearchModulesMessage {
+    /// Return the top-level `text` if non-empty, otherwise concatenate text
+    /// extracted from blocks (section, header, and context blocks).
+    pub fn effective_text(&self) -> String {
+        if let Some(ref t) = self.text
+            && !t.is_empty()
+        {
+            return t.clone();
+        }
+        Self::text_from_blocks(&self.blocks)
+    }
+
+    fn text_from_blocks(blocks: &[Value]) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        for block in blocks {
+            let block_type = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
+            match block_type {
+                "section" | "header" => {
+                    if let Some(text) = block.get("text").and_then(|v| v.get("text")).and_then(|v| v.as_str()) {
+                        parts.push(text.to_string());
+                    }
+                }
+                "context" => {
+                    if let Some(elements) = block.get("elements").and_then(|v| v.as_array()) {
+                        for elem in elements {
+                            if let Some(text) = elem.get("text").and_then(|v| v.as_str()) {
+                                parts.push(text.to_string());
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        parts.join("\n")
+    }
 }
 
 #[derive(Debug, Deserialize)]
