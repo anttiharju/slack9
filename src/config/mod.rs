@@ -35,11 +35,23 @@ pub struct StateConfig {
         serialize_with = "serialize_search"
     )]
     pub search: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_categories: Option<Vec<String>>,
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub show_uncategorised: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn is_true(v: &bool) -> bool {
+    *v
 }
 
 impl StateConfig {
     fn is_default(&self) -> bool {
-        !self.user_pings && self.search.is_none()
+        !self.user_pings && self.search.is_none() && self.active_categories.is_none() && self.show_uncategorised
     }
 }
 

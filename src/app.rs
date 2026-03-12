@@ -74,7 +74,11 @@ impl App {
             original_hook(panic);
         }));
 
-        let active_categories = config.categories.keys().cloned().collect();
+        let active_categories: HashSet<String> = match &config.state.active_categories {
+            Some(saved) => saved.iter().cloned().collect(),
+            None => config.categories.keys().cloned().collect(),
+        };
+        let show_uncategorised = config.state.show_uncategorised;
 
         Self {
             client: Arc::new(client),
@@ -89,7 +93,7 @@ impl App {
             past,
             poll,
             active_categories,
-            show_uncategorised: true,
+            show_uncategorised,
         }
     }
 
@@ -144,6 +148,12 @@ impl App {
 
     fn save_query(&mut self, queries: &[String]) {
         self.config.state.search = Some(queries.to_vec());
+        let _ = config::save(&self.config);
+    }
+
+    fn save_category_state(&mut self) {
+        self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
+        self.config.state.show_uncategorised = self.show_uncategorised;
         let _ = config::save(&self.config);
     }
 
@@ -306,6 +316,7 @@ impl App {
                                 self.show_uncategorised = !self.show_uncategorised;
                             }
                             pending_o = false;
+                            self.save_category_state();
                         }
                         KeyCode::Char(c @ '1'..='9') => {
                             pending_g = None;
@@ -324,6 +335,7 @@ impl App {
                                         self.active_categories.insert(name.clone());
                                     }
                                 }
+                                self.save_category_state();
                             }
                             pending_o = false;
                         }
