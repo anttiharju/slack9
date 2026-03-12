@@ -197,7 +197,7 @@ Run:
 ulimit -n 512
 ```
 
-This cannot be packaged into the direnv setup.
+This unfortunately cannot be packaged into the direnv setup.
 
 ## Acknowledgements
 
