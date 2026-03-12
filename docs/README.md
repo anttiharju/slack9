@@ -4,7 +4,7 @@
 
 <!--🐒-->
 
-`slack9` is a terminal user interface (TUI) for tracking Slack messages based on search queries. Built with Rust using [ratatui](https://github.com/ratatui/ratatui).
+`slack9` is a terminal user interface (TUI) for tracking Slack messages based on search queries.
 
 ## Features
 
@@ -17,6 +17,8 @@
 - **Deep linking** – press Enter to open a message directly in Slack
 - **Vim-style keybindings** for navigation
 
+![Screenshot](./Scherm­afbeelding%202026-03-12%20om%2021.30.32.png)
+
 ## Installation
 
 <!--🙈-->
@@ -27,13 +29,13 @@ brew install anttiharju/tap/slack9
 
 or download a binary from GitHub releases.
 
-Also available for Nix via https://github.com/anttiharju/nur-packages
+Also available via Nix at https://github.com/anttiharju/nur-packages
 
 ## Usage
 
 <!--🙉-->
 
-Use with direnv `.envrc`:
+Use with a direnv `.envrc`:
 
 ```sh
 #!/usr/bin/env bash
@@ -44,36 +46,11 @@ export SLACK9_XOXC=xoxc-bar
 export SLACK9_XOXD=xoxd-baz
 ```
 
+and launch!
+
 ```sh
-slack9 [--debug]
+slack9
 ```
-
-The `--debug` flag logs all API calls and responses to `~/.config/slack9/debug<epoch>.log`.
-
-## Configuration
-
-<!--🙊-->
-
-Config is stored at `~/.config/slack9/config.toml` (override with `$SLACK9_CONFIG_DIR`).
-
-```toml
-[header]
-past = "7d"      # Lookback window
-poll = "10s"     # Poll interval
-
-[categories]
-blocked = "hourglass"
-completed = "white_check_mark"
-wip = ["eyes", "writing_hand"]
-
-[state]
-user_pings = true
-search = ["help", "me"]
-active_categories = []
-show_uncategorised = true
-```
-
-Duration values support `s`, `m`, `h`, `d`, `w`, `M` (e.g., `7d`, `2h30m`).
 
 ### Environment variables
 
@@ -106,6 +83,31 @@ This one you need to do manually.
 #### Revoke tokens
 
 Simply log out from the browser session from where you extracted the tokens.
+
+## Configuration
+
+<!--🙊-->
+
+`config.toml` is loaded from `~/.config/slack9` (override with `$SLACK9_CONFIG_DIR`).
+
+```toml
+[header]
+past = "7d"      # Lookback window
+poll = "10s"     # Poll interval
+
+[categories]
+blocked = "hourglass"
+completed = "white_check_mark"
+wip = ["eyes", "writing_hand"]
+
+[state]
+user_pings = true
+search = ["help", "me"]
+active_categories = []
+show_uncategorised = true
+```
+
+Duration values support `s`, `m`, `h`, `d`, `w`, `M` (e.g., `7d`, `2h30m`).
 
 ## Keybindings
 
