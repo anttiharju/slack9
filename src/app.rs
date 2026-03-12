@@ -248,7 +248,7 @@ impl App {
                         KeyCode::Enter => {
                             let cmd = buf.trim().to_string();
                             let mut handled = false;
-                            if cmd == "q" || cmd == "q!" {
+                            if cmd == "q" || cmd == "q!" || cmd == "quit" {
                                 return TrackResult::Quit;
                             }
                             if self.handle_config_command(&cmd) {
