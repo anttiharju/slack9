@@ -6,4 +6,6 @@ pub struct TrackedMessage {
     pub display_name: String,
     pub text: String,
     pub reaction_emojis: Vec<String>,
+    /// Reaction emojis placed by the current user (subset of reaction_emojis).
+    pub user_reaction_emojis: Vec<String>,
 }
