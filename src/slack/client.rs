@@ -1,6 +1,7 @@
 use super::api_log::ApiLog;
 use super::types::*;
 use std::collections::HashMap;
+use std::sync::RwLock;
 
 pub struct SlackClient {
     agent: ureq::Agent,
@@ -9,6 +10,7 @@ pub struct SlackClient {
     xoxc: String,
     users: HashMap<String, String>,
     usergroups: HashMap<String, String>,
+    channels: RwLock<HashMap<String, String>>,
     api_log: Option<ApiLog>,
 }
 
@@ -27,6 +29,7 @@ impl SlackClient {
             xoxc,
             users: HashMap::new(),
             usergroups: HashMap::new(),
+            channels: RwLock::new(HashMap::new()),
             api_log,
         }
     }
@@ -37,6 +40,15 @@ impl SlackClient {
 
     pub fn resolve_usergroup(&self, usergroup_id: &str) -> String {
         self.usergroups.get(usergroup_id).cloned().unwrap_or_else(|| usergroup_id.to_string())
+    }
+
+    pub fn resolve_channel(&self, channel_id: &str) -> String {
+        if let Some(name) = self.channels.read().unwrap().get(channel_id) {
+            return name.clone();
+        }
+        let name = self.fetch_channel_name(channel_id).unwrap_or_else(|| channel_id.to_string());
+        self.channels.write().unwrap().insert(channel_id.to_string(), name.clone());
+        name
     }
 
     fn log_api(&self, method: &str) {
@@ -70,6 +82,15 @@ impl SlackClient {
     pub fn load_usergroups(&mut self) -> Result<(), String> {
         self.usergroups = self.fetch_usergroups()?;
         Ok(())
+    }
+
+    fn fetch_channel_name(&self, channel_id: &str) -> Option<String> {
+        self.log_api("conversations.info");
+        let url = format!("{}/api/conversations.info", self.workspace_url);
+        let body = format!("token={}&channel={}", self.xoxc, channel_id);
+        let raw = self.post_form(&url, &body).ok()?.read_to_string().ok()?;
+        let val: serde_json::Value = serde_json::from_str(&raw).ok()?;
+        val.get("channel")?.get("name")?.as_str().map(String::from)
     }
 
     fn fetch_usergroups(&self) -> Result<HashMap<String, String>, String> {

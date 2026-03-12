@@ -549,6 +549,27 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
             break;
         }
     }
+    // Resolve channel mentions: <#C...> or <#C...|name>
+    while let Some(start) = result.find("<#") {
+        if let Some(end) = result[start..].find('>') {
+            let inner = &result[start + 2..start + end];
+            let had_highlight = inner.contains('\u{E000}');
+            let clean = inner.replace(['\u{E000}', '\u{E001}'], "");
+            let name = if let Some(pipe) = clean.find('|') {
+                clean[pipe + 1..].to_string()
+            } else {
+                client.resolve_channel(&clean)
+            };
+            let replacement = if had_highlight {
+                format!("\u{E000}#{}\u{E001}", name)
+            } else {
+                format!("#{}", name)
+            };
+            result.replace_range(start..start + end + 1, &replacement);
+        } else {
+            break;
+        }
+    }
     // Resolve usergroup mentions: <!subteam^S...>
     while let Some(start) = result.find("<!subteam^") {
         if let Some(end) = result[start..].find('>') {
