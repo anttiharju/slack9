@@ -412,7 +412,15 @@ impl App {
                             if let Some(selected) = list_state.selected() {
                                 let visible: Vec<&TrackedMessage> = messages
                                     .iter()
-                                    .filter(|m| is_message_visible(m, &categories, &active_categories, show_uncategorised))
+                                    .filter(|m| {
+                                        if let Some(f) = effective_channel_filter
+                                            && !f.is_empty()
+                                            && !m.channel_name.to_lowercase().contains(&f.to_lowercase())
+                                        {
+                                            return false;
+                                        }
+                                        is_message_visible(m, &categories, &active_categories, show_uncategorised)
+                                    })
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
                                     let link_ts = msg.thread_ts.as_deref().unwrap_or(&msg.ts);
