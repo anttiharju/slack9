@@ -79,18 +79,34 @@ pub struct SearchModulesMessage {
     pub thread_ts: Option<String>,
     #[serde(default)]
     pub blocks: Vec<Value>,
+    #[serde(default)]
+    pub attachments: Vec<Value>,
 }
 
 impl SearchModulesMessage {
     /// Return the top-level `text` if non-empty, otherwise concatenate text
-    /// extracted from blocks (section, header, and context blocks).
+    /// extracted from blocks (section, header, and context blocks),
+    /// falling back to attachment blocks.
     pub fn effective_text(&self) -> String {
         if let Some(ref t) = self.text
             && !t.is_empty()
         {
             return t.clone();
         }
-        Self::text_from_blocks(&self.blocks)
+        let from_blocks = Self::text_from_blocks(&self.blocks);
+        if !from_blocks.is_empty() {
+            return from_blocks;
+        }
+        // Fall back to attachments
+        for attachment in &self.attachments {
+            if let Some(blocks) = attachment.get("blocks").and_then(|v| v.as_array()) {
+                let text = Self::text_from_blocks(blocks);
+                if !text.is_empty() {
+                    return text;
+                }
+            }
+        }
+        String::new()
     }
 
     fn text_from_blocks(blocks: &[Value]) -> String {
@@ -101,6 +117,13 @@ impl SearchModulesMessage {
                 "section" | "header" => {
                     if let Some(text) = block.get("text").and_then(|v| v.get("text")).and_then(|v| v.as_str()) {
                         parts.push(text.to_string());
+                    }
+                    if let Some(fields) = block.get("fields").and_then(|v| v.as_array()) {
+                        for field in fields {
+                            if let Some(text) = field.get("text").and_then(|v| v.as_str()) {
+                                parts.push(text.to_string());
+                            }
+                        }
                     }
                 }
                 "context" => {

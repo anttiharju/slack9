@@ -536,7 +536,7 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
         if let Some(end) = result[start..].find('>') {
             let inner = &result[start + 2..start + end];
             let user_id = inner.split('|').next().unwrap_or(inner);
-            let had_highlight = user_id.contains('\u{E000}');
+            let had_highlight = inner.contains('\u{E000}');
             let user_id_clean = user_id.replace(['\u{E000}', '\u{E001}'], "");
             let name = client.resolve_user(&user_id_clean);
             let replacement = if had_highlight {
@@ -554,7 +554,7 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
         if let Some(end) = result[start..].find('>') {
             let inner = &result[start + "<!subteam^".len()..start + end];
             let group_id = inner.split('|').next().unwrap_or(inner);
-            let had_highlight = group_id.contains('\u{E000}');
+            let had_highlight = inner.contains('\u{E000}');
             let group_id_clean = group_id.replace(['\u{E000}', '\u{E001}'], "");
             let name = client.resolve_usergroup(&group_id_clean);
             let replacement = if had_highlight {
