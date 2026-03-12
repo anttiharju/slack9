@@ -4,7 +4,7 @@ description = "slack9 is a template for my Rust projects to make it easier to st
 repository = "https://github.com/anttiharju/slack9"
 readme = "docs/README.md"
 name = "slack9"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 include = ["src/**", "tests/**"]
 
