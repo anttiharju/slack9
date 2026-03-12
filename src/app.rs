@@ -662,5 +662,6 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
             }
         }
     }
+    results.sort_by(|a, b| a.ts.partial_cmp(&b.ts).unwrap_or(std::cmp::Ordering::Equal));
     results
 }
