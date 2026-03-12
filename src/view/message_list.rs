@@ -85,9 +85,10 @@ pub fn render(
         } else if let Some(fbuf) = filter_buf {
             filter_bar::render(frame, overlay_area, fbuf, true);
         } else if let Some(cf) = channel_filter
-            && !cf.is_empty() {
-                filter_bar::render(frame, overlay_area, cf, false);
-            }
+            && !cf.is_empty()
+        {
+            filter_bar::render(frame, overlay_area, cf, false);
+        }
     }
 
     let items: Vec<ListItem> = messages

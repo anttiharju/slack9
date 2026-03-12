@@ -17,7 +17,6 @@ use std::time::{Duration, Instant};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 enum TrackResult {
-    Restart,
     Quit,
 }
 
@@ -117,7 +116,7 @@ impl App {
 
         let default_source = self.resolve_initial_source();
 
-        while let TrackResult::Restart = self.track(default_source.clone()) {}
+        self.track(default_source);
     }
 
     /// Handle `:time <val>` and `:poll <val>` commands.
@@ -427,7 +426,10 @@ impl App {
                             }
                         }
                         KeyCode::Esc => {
-                            return TrackResult::Restart;
+                            if self.channel_filter.is_some() {
+                                self.channel_filter = None;
+                                list_state = ListState::default();
+                            }
                         }
                         _ => {
                             pending_g = None;
