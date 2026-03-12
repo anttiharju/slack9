@@ -192,23 +192,9 @@ impl App {
         }
     }
 
-    fn active_show_emojis(&self) -> Vec<String> {
-        let active = &self.active_categories;
-        self.config
-            .categories
-            .iter()
-            .filter(|(name, _)| active.contains(*name))
-            .flat_map(|(_, emojis)| emojis.iter().cloned())
-            .collect()
-    }
-
-    fn all_configured_emojis(&self) -> Vec<String> {
-        self.config.categories.values().flatten().cloned().collect()
-    }
-
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
         let user_ping_filter = self.user_ping_filter();
-        let new_msgs = fetch_messages(&self.client, source, self.past, user_ping_filter.as_ref());
+        let new_msgs = fetch_messages(&self.client, source, self.past, user_ping_filter.as_ref(), &self.user_id);
         messages.clear();
         seen.clear();
         for msg in new_msgs {
@@ -235,20 +221,15 @@ impl App {
         last_poll = Some(Instant::now());
 
         loop {
-            // Client-side filtering: show messages that have no configured reaction or at least one active reaction
-            let show_emojis = self.active_show_emojis();
-            let all_emojis = self.all_configured_emojis();
+            // Client-side filtering: each message belongs to exactly one effective category.
+            // The user's own category reaction takes precedence; otherwise the
+            // highest-priority matching category wins (later in config = higher priority).
+            let categories = self.config.categories.clone();
             let show_uncategorised = self.show_uncategorised;
+            let active_categories = self.active_categories.clone();
             let visible_count = messages
                 .iter()
-                .filter(|m| {
-                    let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
-                    if configured.is_empty() {
-                        show_uncategorised
-                    } else {
-                        configured.iter().any(|e| show_emojis.contains(e))
-                    }
-                })
+                .filter(|m| is_message_visible(m, &categories, &active_categories, show_uncategorised))
                 .count();
 
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
@@ -402,14 +383,7 @@ impl App {
                             if let Some(selected) = list_state.selected() {
                                 let visible: Vec<&TrackedMessage> = messages
                                     .iter()
-                                    .filter(|m| {
-                                        let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
-                                        if configured.is_empty() {
-                                            show_uncategorised
-                                        } else {
-                                            configured.iter().any(|e| show_emojis.contains(e))
-                                        }
-                                    })
+                                    .filter(|m| is_message_visible(m, &categories, &active_categories, show_uncategorised))
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
                                     let link_ts = msg.thread_ts.as_deref().unwrap_or(&msg.ts);
@@ -456,8 +430,9 @@ impl App {
                 let generation = poll_generation;
                 let tx = tx.clone();
                 let user_ping_filter = self.user_ping_filter();
+                let user_id = self.user_id.clone();
                 std::thread::spawn(move || {
-                    let results = fetch_messages(&client, &source_clone, past, user_ping_filter.as_ref());
+                    let results = fetch_messages(&client, &source_clone, past, user_ping_filter.as_ref(), &user_id);
                     let _ = tx.send((generation, results));
                 });
             }
@@ -496,12 +471,7 @@ impl App {
                     if msg_ts < oldest {
                         return false;
                     }
-                    let configured: Vec<&String> = m.reaction_emojis.iter().filter(|e| all_emojis.contains(e)).collect();
-                    if configured.is_empty() {
-                        show_uncategorised
-                    } else {
-                        configured.iter().any(|e| show_emojis.contains(e))
-                    }
+                    is_message_visible(m, &categories, &active_categories, show_uncategorised)
                 })
                 .collect();
 
@@ -538,6 +508,40 @@ impl App {
                 })
                 .expect("failed to draw");
         }
+    }
+}
+
+/// Determine the single effective category for a message.
+///
+/// If the current user has reacted with a category emoji, the highest-priority
+/// matching user category wins. Otherwise, the highest-priority category from
+/// any reactor wins. Priority order: later in config = higher priority.
+fn effective_category(msg: &TrackedMessage, categories: &indexmap::IndexMap<String, Vec<String>>) -> Option<String> {
+    // Check user's own reactions first (highest priority = last in config → iterate reversed)
+    for (name, emojis) in categories.iter().rev() {
+        if msg.user_reaction_emojis.iter().any(|e| emojis.contains(e)) {
+            return Some(name.clone());
+        }
+    }
+    // Fall back to any reaction (highest priority = last in config)
+    for (name, emojis) in categories.iter().rev() {
+        if msg.reaction_emojis.iter().any(|e| emojis.contains(e)) {
+            return Some(name.clone());
+        }
+    }
+    None
+}
+
+/// Check whether a message should be visible with the current category filters.
+fn is_message_visible(
+    msg: &TrackedMessage,
+    categories: &indexmap::IndexMap<String, Vec<String>>,
+    active_categories: &HashSet<String>,
+    show_uncategorised: bool,
+) -> bool {
+    match effective_category(msg, categories) {
+        Some(cat) => active_categories.contains(&cat),
+        None => show_uncategorised,
     }
 }
 
@@ -653,7 +657,13 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
     result
 }
 
-fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, user_ping_filter: Option<&(String, String)>) -> Vec<TrackedMessage> {
+fn fetch_messages(
+    client: &SlackClient,
+    source: &MessageSource,
+    past: Duration,
+    user_ping_filter: Option<&(String, String)>,
+    current_user_id: &str,
+) -> Vec<TrackedMessage> {
     let mut results = Vec::new();
     match source {
         MessageSource::Search(queries) => {
@@ -683,6 +693,12 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
                                     continue;
                                 }
                                 let reaction_emojis: Vec<String> = m.reactions.iter().map(|r| r.name.clone()).collect();
+                                let user_reaction_emojis: Vec<String> = m
+                                    .reactions
+                                    .iter()
+                                    .filter(|r| r.users.as_ref().is_some_and(|u| u.contains(&current_user_id.to_string())))
+                                    .map(|r| r.name.clone())
+                                    .collect();
                                 let user_id_str = m.user.as_deref().unwrap_or("unknown");
                                 let display_name = client.resolve_user(user_id_str);
                                 let raw_text = m.effective_text();
@@ -716,6 +732,7 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, 
                                     display_name,
                                     text,
                                     reaction_emojis,
+                                    user_reaction_emojis,
                                 });
                             }
                         }
