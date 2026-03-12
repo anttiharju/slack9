@@ -26,4 +26,5 @@ define_exitcodes! {
     user_load_error => UserLoadError = 9,
     missing_team_id => MissingTeamId = 10,
     missing_user_id => MissingUserId = 11,
+    usergroup_load_error => UsergroupLoadError = 12,
 }

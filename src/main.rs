@@ -68,6 +68,12 @@ fn main() {
         std::process::exit(exitcode::user_load_error());
     });
 
-    let app = app::App::new(client, config, team_id, team_name, user_id, past, poll);
+    client.load_usergroups().unwrap_or_else(|e| {
+        eprintln!("Error loading usergroups: {}", e);
+        std::process::exit(exitcode::usergroup_load_error());
+    });
+
+    let user_name = client.resolve_user(&user_id);
+    let app = app::App::new(client, config, team_id, team_name, user_id, user_name, past, poll);
     app.run();
 }

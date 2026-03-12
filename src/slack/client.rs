@@ -1,6 +1,7 @@
 use super::api_log::ApiLog;
 use super::types::*;
 use std::collections::HashMap;
+use std::sync::RwLock;
 
 pub struct SlackClient {
     agent: ureq::Agent,
@@ -8,6 +9,8 @@ pub struct SlackClient {
     xoxd: String,
     xoxc: String,
     users: HashMap<String, String>,
+    usergroups: HashMap<String, String>,
+    channels: RwLock<HashMap<String, String>>,
     api_log: Option<ApiLog>,
 }
 
@@ -25,12 +28,27 @@ impl SlackClient {
             xoxd,
             xoxc,
             users: HashMap::new(),
+            usergroups: HashMap::new(),
+            channels: RwLock::new(HashMap::new()),
             api_log,
         }
     }
 
     pub fn resolve_user(&self, user_id: &str) -> String {
         self.users.get(user_id).cloned().unwrap_or_else(|| user_id.to_string())
+    }
+
+    pub fn resolve_usergroup(&self, usergroup_id: &str) -> String {
+        self.usergroups.get(usergroup_id).cloned().unwrap_or_else(|| usergroup_id.to_string())
+    }
+
+    pub fn resolve_channel(&self, channel_id: &str) -> String {
+        if let Some(name) = self.channels.read().unwrap().get(channel_id) {
+            return name.clone();
+        }
+        let name = self.fetch_channel_name(channel_id).unwrap_or_else(|| channel_id.to_string());
+        self.channels.write().unwrap().insert(channel_id.to_string(), name.clone());
+        name
     }
 
     fn log_api(&self, method: &str) {
@@ -59,6 +77,47 @@ impl SlackClient {
     pub fn load_users(&mut self) -> Result<(), String> {
         self.users = self.fetch_all_users()?;
         Ok(())
+    }
+
+    pub fn load_usergroups(&mut self) -> Result<(), String> {
+        self.usergroups = self.fetch_usergroups()?;
+        Ok(())
+    }
+
+    fn fetch_channel_name(&self, channel_id: &str) -> Option<String> {
+        self.log_api("conversations.info");
+        let url = format!("{}/api/conversations.info", self.workspace_url);
+        let body = format!("token={}&channel={}", self.xoxc, channel_id);
+        let raw = self.post_form(&url, &body).ok()?.read_to_string().ok()?;
+        let val: serde_json::Value = serde_json::from_str(&raw).ok()?;
+        val.get("channel")?.get("name")?.as_str().map(String::from)
+    }
+
+    fn fetch_usergroups(&self) -> Result<HashMap<String, String>, String> {
+        self.log_api("usergroups.list");
+        let url = format!("{}/api/usergroups.list", self.workspace_url);
+        let body = format!("token={}", self.xoxc);
+
+        let resp: UsergroupsListResponse = self
+            .post_form(&url, &body)?
+            .read_json()
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        if !resp.ok {
+            return Err(format!(
+                "usergroups.list failed: {}",
+                resp.error.unwrap_or_else(|| "unknown error".to_string())
+            ));
+        }
+
+        let mut map = HashMap::new();
+        if let Some(groups) = resp.usergroups {
+            for g in groups {
+                let label = if g.handle.is_empty() { g.name } else { g.handle };
+                map.insert(g.id, label);
+            }
+        }
+        Ok(map)
     }
 
     fn fetch_all_users(&self) -> Result<HashMap<String, String>, String> {

@@ -32,6 +32,7 @@ pub struct App {
     team_id: String,
     team_name: String,
     user_id: String,
+    user_name: String,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
     command_error: bool,
@@ -50,7 +51,16 @@ impl Drop for App {
 
 impl App {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(client: SlackClient, config: Config, team_id: String, team_name: String, user_id: String, past: Duration, poll: Duration) -> Self {
+    pub fn new(
+        client: SlackClient,
+        config: Config,
+        team_id: String,
+        team_name: String,
+        user_id: String,
+        user_name: String,
+        past: Duration,
+        poll: Duration,
+    ) -> Self {
         enable_raw_mode().expect("failed to enable raw mode");
         let mut stdout = io::stdout();
         crossterm::execute!(stdout, EnterAlternateScreen).expect("failed to enter alternate screen");
@@ -64,7 +74,11 @@ impl App {
             original_hook(panic);
         }));
 
-        let active_categories = config.categories.keys().cloned().collect();
+        let active_categories: HashSet<String> = match &config.state.active_categories {
+            Some(saved) => saved.iter().cloned().collect(),
+            None => config.categories.keys().cloned().collect(),
+        };
+        let show_uncategorised = config.state.show_uncategorised;
 
         Self {
             client: Arc::new(client),
@@ -72,13 +86,14 @@ impl App {
             team_id,
             team_name,
             user_id,
+            user_name,
             terminal,
             command_buf: None,
             command_error: false,
             past,
             poll,
             active_categories,
-            show_uncategorised: true,
+            show_uncategorised,
         }
     }
 
@@ -136,6 +151,12 @@ impl App {
         let _ = config::save(&self.config);
     }
 
+    fn save_category_state(&mut self) {
+        self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
+        self.config.state.show_uncategorised = self.show_uncategorised;
+        let _ = config::save(&self.config);
+    }
+
     fn resolve_initial_source(&mut self) -> MessageSource {
         let mut queries: Vec<String> = self
             .config
@@ -161,6 +182,16 @@ impl App {
         MessageSource::Search(queries)
     }
 
+    /// Returns the user_pings query and display name if user_pings is enabled,
+    /// used to filter results from that query to only messages containing @user_name.
+    fn user_ping_filter(&self) -> Option<(String, String)> {
+        if self.config.state.user_pings {
+            Some((format!("<@{}>", self.user_id), self.user_name.clone()))
+        } else {
+            None
+        }
+    }
+
     fn active_show_emojis(&self) -> Vec<String> {
         let active = &self.active_categories;
         self.config
@@ -176,7 +207,8 @@ impl App {
     }
 
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
-        let new_msgs = fetch_messages(&self.client, source, self.past);
+        let user_ping_filter = self.user_ping_filter();
+        let new_msgs = fetch_messages(&self.client, source, self.past, user_ping_filter.as_ref());
         messages.clear();
         seen.clear();
         for msg in new_msgs {
@@ -295,6 +327,7 @@ impl App {
                                 self.show_uncategorised = !self.show_uncategorised;
                             }
                             pending_o = false;
+                            self.save_category_state();
                         }
                         KeyCode::Char(c @ '1'..='9') => {
                             pending_g = None;
@@ -313,6 +346,7 @@ impl App {
                                         self.active_categories.insert(name.clone());
                                     }
                                 }
+                                self.save_category_state();
                             }
                             pending_o = false;
                         }
@@ -421,8 +455,9 @@ impl App {
                 let past = self.past;
                 let generation = poll_generation;
                 let tx = tx.clone();
+                let user_ping_filter = self.user_ping_filter();
                 std::thread::spawn(move || {
-                    let results = fetch_messages(&client, &source_clone, past);
+                    let results = fetch_messages(&client, &source_clone, past, user_ping_filter.as_ref());
                     let _ = tx.send((generation, results));
                 });
             }
@@ -480,6 +515,7 @@ impl App {
                 drain_elapsed: drain_start.map(|t| t.elapsed()),
             };
             let team_name = &self.team_name;
+            let user_name = &self.user_name;
             let active_categories = &self.active_categories;
             let show_uncategorised = self.show_uncategorised;
             self.terminal
@@ -495,6 +531,7 @@ impl App {
                         &mut list_state,
                         &poll_state,
                         team_name,
+                        user_name,
                         active_categories,
                         show_uncategorised,
                     );
@@ -506,13 +543,109 @@ impl App {
 
 fn resolve_mentions(client: &SlackClient, text: &str) -> String {
     let mut result = text.to_string();
+    // Resolve user mentions: <@U...>
     while let Some(start) = result.find("<@") {
         if let Some(end) = result[start..].find('>') {
             let inner = &result[start + 2..start + end];
             let user_id = inner.split('|').next().unwrap_or(inner);
+            let had_highlight = inner.contains('\u{E000}');
             let user_id_clean = user_id.replace(['\u{E000}', '\u{E001}'], "");
             let name = client.resolve_user(&user_id_clean);
-            result.replace_range(start..start + end + 1, &format!("@{}", name));
+            let replacement = if had_highlight {
+                format!("\u{E000}@{}\u{E001}", name)
+            } else {
+                format!("@{}", name)
+            };
+            result.replace_range(start..start + end + 1, &replacement);
+        } else {
+            break;
+        }
+    }
+    // Resolve channel mentions: <#C...> or <#C...|name>
+    while let Some(start) = result.find("<#") {
+        if let Some(end) = result[start..].find('>') {
+            let inner = &result[start + 2..start + end];
+            let had_highlight = inner.contains('\u{E000}');
+            let clean = inner.replace(['\u{E000}', '\u{E001}'], "");
+            let name = if let Some(pipe) = clean.find('|') {
+                clean[pipe + 1..].to_string()
+            } else {
+                client.resolve_channel(&clean)
+            };
+            let replacement = if had_highlight {
+                format!("\u{E000}#{}\u{E001}", name)
+            } else {
+                format!("#{}", name)
+            };
+            result.replace_range(start..start + end + 1, &replacement);
+        } else {
+            break;
+        }
+    }
+    // Resolve usergroup mentions: <!subteam^S...>
+    while let Some(start) = result.find("<!subteam^") {
+        if let Some(end) = result[start..].find('>') {
+            let inner = &result[start + "<!subteam^".len()..start + end];
+            let group_id = inner.split('|').next().unwrap_or(inner);
+            let had_highlight = inner.contains('\u{E000}');
+            let group_id_clean = group_id.replace(['\u{E000}', '\u{E001}'], "");
+            let name = client.resolve_usergroup(&group_id_clean);
+            let replacement = if had_highlight {
+                format!("\u{E000}@{}\u{E001}", name)
+            } else {
+                format!("@{}", name)
+            };
+            result.replace_range(start..start + end + 1, &replacement);
+        } else {
+            break;
+        }
+    }
+    // Resolve bare usergroup IDs: <S08G72CNAA3> (with optional highlight markers)
+    loop {
+        let start = result.find("<S").or_else(|| result.find("<\u{E000}S"));
+        let Some(start) = start else { break };
+        let Some(rel_end) = result[start..].find('>') else { break };
+        let end = start + rel_end;
+        let inner = &result[start + 1..end];
+        let had_highlight = inner.contains('\u{E000}');
+        let clean = inner.replace(['\u{E000}', '\u{E001}'], "");
+        if clean.len() > 1 && clean[1..].chars().all(|c| c.is_ascii_alphanumeric()) {
+            let name = client.resolve_usergroup(&clean);
+            if name != clean {
+                let replacement = if had_highlight {
+                    format!("\u{E000}@{}\u{E001}", name)
+                } else {
+                    format!("@{}", name)
+                };
+                result.replace_range(start..end + 1, &replacement);
+                continue;
+            }
+        }
+        break;
+    }
+    // Resolve links: <https://...|label> or <https://...>
+    let mut i = 0;
+    while i < result.len() {
+        if let Some(rel_start) = result[i..].find('<') {
+            let start = i + rel_start;
+            let after = &result[start + 1..];
+            let check = after.trim_start_matches('\u{E000}');
+            if (check.starts_with("http://") || check.starts_with("https://") || check.starts_with("mailto:"))
+                && let Some(rel_end) = result[start..].find('>')
+            {
+                let end = start + rel_end;
+                let inner = &result[start + 1..end];
+                let clean = inner.replace(['\u{E000}', '\u{E001}'], "");
+                let display = if let Some(pipe) = clean.find('|') {
+                    clean[pipe + 1..].to_string()
+                } else {
+                    clean
+                };
+                result.replace_range(start..end + 1, &display);
+                i = start + display.len();
+                continue;
+            }
+            i = start + 1;
         } else {
             break;
         }
@@ -520,19 +653,27 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
     result
 }
 
-fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) -> Vec<TrackedMessage> {
+fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, user_ping_filter: Option<&(String, String)>) -> Vec<TrackedMessage> {
     let mut results = Vec::new();
     match source {
         MessageSource::Search(queries) => {
             let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - past.as_secs_f64();
             let mut seen_ts = std::collections::HashSet::new();
             for query in queries {
+                let is_user_ping_query = user_ping_filter.as_ref().is_some_and(|(q, _)| q == query);
                 if let Ok(resp) = client.search_modules_messages(query)
                     && let Some(items) = resp.items
                 {
                     for item in items {
                         let (channel_id, channel_name) = match &item.channel {
-                            Some(ch) => (ch.id.clone(), ch.name.clone()),
+                            Some(ch) => {
+                                let name = if is_user_id(&ch.name) {
+                                    client.resolve_user(&ch.name)
+                                } else {
+                                    ch.name.clone()
+                                };
+                                (ch.id.clone(), name)
+                            }
                             None => ("unknown".to_string(), "unknown".to_string()),
                         };
                         if let Some(messages) = item.messages {
@@ -544,8 +685,20 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
                                 let reaction_emojis: Vec<String> = m.reactions.iter().map(|r| r.name.clone()).collect();
                                 let user_id_str = m.user.as_deref().unwrap_or("unknown");
                                 let display_name = client.resolve_user(user_id_str);
-                                let raw_text = m.text.as_deref().unwrap_or("").to_string();
-                                let text = resolve_mentions(client, &raw_text);
+                                let raw_text = m.effective_text();
+                                let mut text = resolve_mentions(client, &raw_text).replace('\n', " ");
+                                while text.contains("  ") {
+                                    text = text.replace("  ", " ");
+                                }
+
+                                // For user_pings query, only keep messages that mention @user_name
+                                if is_user_ping_query && let Some((_, user_name)) = user_ping_filter {
+                                    let at_user = format!("@{}", user_name);
+                                    let text_clean = text.replace(['\u{E000}', '\u{E001}'], "");
+                                    if !text_clean.contains(&at_user) {
+                                        continue;
+                                    }
+                                }
 
                                 let thread_ts = m.thread_ts.clone().or_else(|| {
                                     m.permalink.as_deref().and_then(|p| {
@@ -571,5 +724,11 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
             }
         }
     }
+    results.sort_by(|a, b| a.ts.partial_cmp(&b.ts).unwrap_or(std::cmp::Ordering::Equal));
     results
+}
+
+/// Check if a string looks like a Slack user ID (e.g. "U05315SPC9Y").
+fn is_user_id(s: &str) -> bool {
+    s.len() > 1 && s.starts_with('U') && s[1..].chars().all(|c| c.is_ascii_alphanumeric())
 }
