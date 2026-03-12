@@ -419,8 +419,10 @@ impl App {
                                     })
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
-                                    let link_ts = msg.thread_ts.as_deref().unwrap_or(&msg.ts);
-                                    let url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, link_ts);
+                                    let mut url = format!("slack://channel?team={}&id={}&message={}", self.team_id, msg.channel_id, msg.ts);
+                                    if let Some(thread_ts) = &msg.thread_ts {
+                                        url.push_str(&format!("&thread_ts={}", thread_ts));
+                                    }
                                     let _ = std::process::Command::new("open").arg(&url).spawn();
                                 }
                             }
