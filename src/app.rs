@@ -545,7 +545,10 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
                                 let user_id_str = m.user.as_deref().unwrap_or("unknown");
                                 let display_name = client.resolve_user(user_id_str);
                                 let raw_text = m.effective_text();
-                                let text = resolve_mentions(client, &raw_text);
+                                let mut text = resolve_mentions(client, &raw_text).replace('\n', " ");
+                                while text.contains("  ") {
+                                    text = text.replace("  ", " ");
+                                }
 
                                 let thread_ts = m.thread_ts.clone().or_else(|| {
                                     m.permalink.as_deref().and_then(|p| {
