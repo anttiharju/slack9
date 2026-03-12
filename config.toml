@@ -1,8 +1,17 @@
+[header]
+past = "2h"
+
 [categories]
 blocked = "hourglass"
 completed = "white_check_mark"
-wip = ["eyes", "writing_hand"]
+wip = [
+    "eyes",
+    "writing_hand",
+]
 
 [state]
 user_pings = true
-search = ["help", "me"]
+search = [
+    "help",
+    "me",
+]
