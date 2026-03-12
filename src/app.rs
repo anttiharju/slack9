@@ -1,5 +1,5 @@
 use crate::config::{self, Config};
-use crate::model::TrackedMessage;
+use crate::model::{TrackedMessage, effective_category};
 use crate::slack::SlackClient;
 use crate::view;
 use crate::view::header::wave_fraction;
@@ -36,6 +36,8 @@ pub struct App {
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
     command_error: bool,
+    filter_buf: Option<String>,
+    channel_filter: Option<String>,
     past: Duration,
     poll: Duration,
     active_categories: HashSet<String>,
@@ -79,6 +81,7 @@ impl App {
             None => config.categories.keys().cloned().collect(),
         };
         let show_uncategorised = config.state.show_uncategorised;
+        let channel_filter = config.state.channel_filter.clone();
 
         Self {
             client: Arc::new(client),
@@ -90,6 +93,8 @@ impl App {
             terminal,
             command_buf: None,
             command_error: false,
+            filter_buf: None,
+            channel_filter,
             past,
             poll,
             active_categories,
@@ -146,14 +151,14 @@ impl App {
         }
     }
 
-    fn save_query(&mut self, queries: &[String]) {
-        self.config.state.search = Some(queries.to_vec());
-        let _ = config::save(&self.config);
-    }
-
     fn save_category_state(&mut self) {
         self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
         self.config.state.show_uncategorised = self.show_uncategorised;
+        let _ = config::save(&self.config);
+    }
+
+    fn save_channel_filter(&mut self) {
+        self.config.state.channel_filter = self.channel_filter.clone();
         let _ = config::save(&self.config);
     }
 
@@ -203,7 +208,7 @@ impl App {
         }
     }
 
-    fn track(&mut self, mut source: MessageSource) -> TrackResult {
+    fn track(&mut self, source: MessageSource) -> TrackResult {
         let mut messages: Vec<TrackedMessage> = Vec::new();
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut last_poll: Option<Instant>;
@@ -211,7 +216,7 @@ impl App {
         let mut pending_g: Option<char> = None;
         let mut pending_o = false;
         let (tx, rx) = mpsc::channel::<(u64, Vec<TrackedMessage>)>();
-        let mut poll_generation: u64 = 0;
+        let poll_generation: u64 = 0;
         let mut poll_in_flight = false;
         let mut poll_fired_this_cycle = false;
         let mut drain_start: Option<Instant> = None;
@@ -227,9 +232,18 @@ impl App {
             let categories = self.config.categories.clone();
             let show_uncategorised = self.show_uncategorised;
             let active_categories = self.active_categories.clone();
+            let effective_channel_filter = self.filter_buf.as_deref().or(self.channel_filter.as_deref());
             let visible_count = messages
                 .iter()
-                .filter(|m| is_message_visible(m, &categories, &active_categories, show_uncategorised))
+                .filter(|m| {
+                    if let Some(f) = effective_channel_filter
+                        && !f.is_empty()
+                        && !m.channel_name.to_lowercase().contains(&f.to_lowercase())
+                    {
+                        return false;
+                    }
+                    is_message_visible(m, &categories, &active_categories, show_uncategorised)
+                })
                 .count();
 
             if event::poll(Duration::from_millis(100)).unwrap_or(false)
@@ -246,23 +260,6 @@ impl App {
                             }
                             if self.handle_config_command(&cmd) {
                                 handled = true;
-                            }
-
-                            if let Some(rest) = cmd.strip_prefix("search ") {
-                                let queries: Vec<String> = rest.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                                if !queries.is_empty() {
-                                    self.save_query(&queries);
-                                    source = MessageSource::Search(queries);
-                                    messages.clear();
-                                    seen.clear();
-                                    last_poll = None;
-                                    list_state = ListState::default();
-                                    poll_generation += 1;
-                                    poll_in_flight = false;
-                                    poll_fired_this_cycle = false;
-                                    drain_start = None;
-                                    handled = true;
-                                }
                             }
                             if handled {
                                 self.command_buf = None;
@@ -285,7 +282,7 @@ impl App {
                         KeyCode::Char(c) => {
                             if c == ' ' && !buf.contains(' ') {
                                 let abbrev = buf.as_str();
-                                const COMMANDS: &[&str] = &["poll", "search", "time"];
+                                const COMMANDS: &[&str] = &["poll", "time"];
                                 let matches: Vec<&&str> = COMMANDS.iter().filter(|cmd| cmd.starts_with(abbrev)).collect();
                                 if matches.len() == 1 {
                                     buf.clear();
@@ -294,6 +291,33 @@ impl App {
                             }
                             buf.push(c);
                             self.command_error = false;
+                        }
+                        _ => {}
+                    }
+                } else if let Some(ref mut buf) = self.filter_buf {
+                    match key.code {
+                        KeyCode::Enter => {
+                            let filter = buf.trim().to_string();
+                            if filter.is_empty() {
+                                self.channel_filter = None;
+                            } else {
+                                self.channel_filter = Some(filter);
+                            }
+                            self.filter_buf = None;
+                            self.save_channel_filter();
+                            list_state = ListState::default();
+                        }
+                        KeyCode::Esc | KeyCode::Char('\x03') => {
+                            self.filter_buf = None;
+                        }
+                        KeyCode::Backspace => {
+                            buf.pop();
+                            if buf.is_empty() {
+                                self.filter_buf = None;
+                            }
+                        }
+                        KeyCode::Char(c) => {
+                            buf.push(c);
                         }
                         _ => {}
                     }
@@ -339,6 +363,11 @@ impl App {
                             pending_g = None;
                             pending_o = false;
                             self.command_buf = Some(String::new());
+                        }
+                        KeyCode::Char('/') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.filter_buf = Some(self.channel_filter.clone().unwrap_or_default());
                         }
                         KeyCode::Up | KeyCode::Char('k') => {
                             pending_g = None;
@@ -464,19 +493,33 @@ impl App {
 
             // Build filtered visible messages for rendering
             let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - self.past.as_secs_f64();
-            let visible_messages: Vec<&TrackedMessage> = messages
+            let effective_channel_filter = self.filter_buf.as_deref().or(self.channel_filter.as_deref());
+            let all_messages: Vec<&TrackedMessage> = messages
                 .iter()
                 .filter(|m| {
                     let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
                     if msg_ts < oldest {
                         return false;
                     }
-                    is_message_visible(m, &categories, &active_categories, show_uncategorised)
+                    if let Some(f) = effective_channel_filter
+                        && !f.is_empty()
+                        && !m.channel_name.to_lowercase().contains(&f.to_lowercase())
+                    {
+                        return false;
+                    }
+                    true
                 })
+                .collect();
+            let visible_messages: Vec<&TrackedMessage> = all_messages
+                .iter()
+                .filter(|m| is_message_visible(m, &categories, &active_categories, show_uncategorised))
+                .copied()
                 .collect();
 
             let command_buf_snapshot = self.command_buf.clone();
             let command_error = self.command_error;
+            let filter_buf_snapshot = self.filter_buf.clone();
+            let channel_filter_snapshot = self.channel_filter.clone();
             let config = &self.config;
             let poll_state = view::header::PollState {
                 interval: self.poll,
@@ -496,6 +539,9 @@ impl App {
                         area,
                         command_buf_snapshot.as_deref(),
                         command_error,
+                        filter_buf_snapshot.as_deref(),
+                        channel_filter_snapshot.as_deref(),
+                        &all_messages,
                         &visible_messages,
                         config,
                         &mut list_state,
@@ -509,27 +555,6 @@ impl App {
                 .expect("failed to draw");
         }
     }
-}
-
-/// Determine the single effective category for a message.
-///
-/// If the current user has reacted with a category emoji, the highest-priority
-/// matching user category wins. Otherwise, the highest-priority category from
-/// any reactor wins. Priority order: later in config = higher priority.
-fn effective_category(msg: &TrackedMessage, categories: &indexmap::IndexMap<String, Vec<String>>) -> Option<String> {
-    // Check user's own reactions first (highest priority = last in config → iterate reversed)
-    for (name, emojis) in categories.iter().rev() {
-        if msg.user_reaction_emojis.iter().any(|e| emojis.contains(e)) {
-            return Some(name.clone());
-        }
-    }
-    // Fall back to any reaction (highest priority = last in config)
-    for (name, emojis) in categories.iter().rev() {
-        if msg.reaction_emojis.iter().any(|e| emojis.contains(e)) {
-            return Some(name.clone());
-        }
-    }
-    None
 }
 
 /// Check whether a message should be visible with the current category filters.

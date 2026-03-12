@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::model::TrackedMessage;
+use crate::model::{TrackedMessage, effective_category};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -7,7 +7,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding};
 use std::collections::HashSet;
 
-use super::{command_bar, header};
+use super::{command_bar, filter_bar, header};
 use crate::cli;
 
 #[allow(clippy::too_many_arguments)]
@@ -16,6 +16,9 @@ pub fn render(
     area: Rect,
     command_buf: Option<&str>,
     command_error: bool,
+    filter_buf: Option<&str>,
+    _channel_filter: Option<&str>,
+    all_messages: &[&TrackedMessage],
     messages: &[&TrackedMessage],
     config: &Config,
     list_state: &mut ListState,
@@ -25,7 +28,7 @@ pub fn render(
     active_categories: &HashSet<String>,
     show_uncategorised: bool,
 ) {
-    let has_overlay = command_buf.is_some();
+    let has_overlay = command_buf.is_some() || filter_buf.is_some();
 
     let outer = Layout::default()
         .direction(Direction::Vertical)
@@ -50,6 +53,11 @@ pub fn render(
         spans.push(Span::styled(format!(" :{}", prefix), Style::default().fg(Color::White)));
         spans.push(Span::styled(rest, Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)));
     }
+    spans.push(Span::styled(" /", Style::default().fg(Color::White)));
+    spans.push(Span::styled(
+        "#channel",
+        Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+    ));
     let commands_line = Line::from(spans);
     let cmd_area = Rect::new(outer[0].x, outer[0].bottom().saturating_sub(1), outer[0].width, 1);
     frame.render_widget(ratatui::widgets::Paragraph::new(commands_line), cmd_area);
@@ -71,7 +79,11 @@ pub fn render(
     let (overlay_area, list_area) = if has_overlay { (Some(chunks[0]), chunks[1]) } else { (None, chunks[0]) };
 
     if let Some(overlay_area) = overlay_area {
-        command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), command_error);
+        if let Some(fbuf) = filter_buf {
+            filter_bar::render(frame, overlay_area, fbuf);
+        } else {
+            command_bar::render(frame, overlay_area, command_buf.unwrap_or(""), command_error);
+        }
     }
 
     let items: Vec<ListItem> = messages
@@ -87,7 +99,36 @@ pub fn render(
         })
         .collect();
 
-    let title = " search ".to_string();
+    // Build top title with per-category message counts
+    let category_names: Vec<&String> = config.categories.keys().collect();
+    let title = if category_names.is_empty() {
+        String::from(" messages ")
+    } else {
+        let mut counts: Vec<(String, usize)> = Vec::new();
+        let mut uncategorised_count: usize = 0;
+        for msg in all_messages.iter() {
+            match effective_category(msg, &config.categories) {
+                Some(cat) => {
+                    if let Some(entry) = counts.iter_mut().find(|(n, _)| *n == cat) {
+                        entry.1 += 1;
+                    } else {
+                        counts.push((cat, 1));
+                    }
+                }
+                None => uncategorised_count += 1,
+            }
+        }
+        let mut parts: Vec<String> = category_names
+            .iter()
+            .map(|name| {
+                let count = counts.iter().find(|(n, _)| n == *name).map_or(0, |(_, c)| *c);
+                format!("{} {}", count, name)
+            })
+            .collect();
+        parts.push(format!("{} uncategorised", uncategorised_count));
+        let stats = parts.join(", ");
+        format!(" {} ", stats)
+    };
 
     // Build bottom title for category toggles
     let category_names: Vec<&String> = config.categories.keys().collect();

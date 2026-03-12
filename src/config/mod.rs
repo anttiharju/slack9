@@ -39,6 +39,8 @@ pub struct StateConfig {
     pub active_categories: Option<Vec<String>>,
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub show_uncategorised: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub channel_filter: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -51,7 +53,7 @@ fn is_true(v: &bool) -> bool {
 
 impl StateConfig {
     fn is_default(&self) -> bool {
-        !self.user_pings && self.search.is_none() && self.active_categories.is_none() && self.show_uncategorised
+        !self.user_pings && self.search.is_none() && self.active_categories.is_none() && self.show_uncategorised && self.channel_filter.is_none()
     }
 }
 
