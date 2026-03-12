@@ -506,13 +506,87 @@ impl App {
 
 fn resolve_mentions(client: &SlackClient, text: &str) -> String {
     let mut result = text.to_string();
+    // Resolve user mentions: <@U...>
     while let Some(start) = result.find("<@") {
         if let Some(end) = result[start..].find('>') {
             let inner = &result[start + 2..start + end];
             let user_id = inner.split('|').next().unwrap_or(inner);
+            let had_highlight = user_id.contains('\u{E000}');
             let user_id_clean = user_id.replace(['\u{E000}', '\u{E001}'], "");
             let name = client.resolve_user(&user_id_clean);
-            result.replace_range(start..start + end + 1, &format!("@{}", name));
+            let replacement = if had_highlight {
+                format!("\u{E000}@{}\u{E001}", name)
+            } else {
+                format!("@{}", name)
+            };
+            result.replace_range(start..start + end + 1, &replacement);
+        } else {
+            break;
+        }
+    }
+    // Resolve usergroup mentions: <!subteam^S...>
+    while let Some(start) = result.find("<!subteam^") {
+        if let Some(end) = result[start..].find('>') {
+            let inner = &result[start + "<!subteam^".len()..start + end];
+            let group_id = inner.split('|').next().unwrap_or(inner);
+            let had_highlight = group_id.contains('\u{E000}');
+            let group_id_clean = group_id.replace(['\u{E000}', '\u{E001}'], "");
+            let name = client.resolve_usergroup(&group_id_clean);
+            let replacement = if had_highlight {
+                format!("\u{E000}@{}\u{E001}", name)
+            } else {
+                format!("@{}", name)
+            };
+            result.replace_range(start..start + end + 1, &replacement);
+        } else {
+            break;
+        }
+    }
+    // Resolve bare usergroup IDs: <S08G72CNAA3> (with optional highlight markers)
+    loop {
+        let start = result.find("<S").or_else(|| result.find("<\u{E000}S"));
+        let Some(start) = start else { break };
+        let Some(rel_end) = result[start..].find('>') else { break };
+        let end = start + rel_end;
+        let inner = &result[start + 1..end];
+        let had_highlight = inner.contains('\u{E000}');
+        let clean = inner.replace(['\u{E000}', '\u{E001}'], "");
+        if clean.len() > 1 && clean[1..].chars().all(|c| c.is_ascii_alphanumeric()) {
+            let name = client.resolve_usergroup(&clean);
+            if name != clean {
+                let replacement = if had_highlight {
+                    format!("\u{E000}@{}\u{E001}", name)
+                } else {
+                    format!("@{}", name)
+                };
+                result.replace_range(start..end + 1, &replacement);
+                continue;
+            }
+        }
+        break;
+    }
+    // Resolve links: <https://...|label> or <https://...>
+    let mut i = 0;
+    while i < result.len() {
+        if let Some(rel_start) = result[i..].find('<') {
+            let start = i + rel_start;
+            let after = &result[start + 1..];
+            let check = after.trim_start_matches('\u{E000}');
+            if (check.starts_with("http://") || check.starts_with("https://") || check.starts_with("mailto:"))
+                && let Some(rel_end) = result[start..].find('>') {
+                    let end = start + rel_end;
+                    let inner = &result[start + 1..end];
+                    let clean = inner.replace(['\u{E000}', '\u{E001}'], "");
+                    let display = if let Some(pipe) = clean.find('|') {
+                        clean[pipe + 1..].to_string()
+                    } else {
+                        clean
+                    };
+                    result.replace_range(start..end + 1, &display);
+                    i = start + display.len();
+                    continue;
+                }
+            i = start + 1;
         } else {
             break;
         }
