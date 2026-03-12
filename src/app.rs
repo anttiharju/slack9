@@ -32,6 +32,7 @@ pub struct App {
     team_id: String,
     team_name: String,
     user_id: String,
+    user_name: String,
     terminal: Terminal<CrosstermBackend<io::Stdout>>,
     command_buf: Option<String>,
     command_error: bool,
@@ -50,7 +51,16 @@ impl Drop for App {
 
 impl App {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(client: SlackClient, config: Config, team_id: String, team_name: String, user_id: String, past: Duration, poll: Duration) -> Self {
+    pub fn new(
+        client: SlackClient,
+        config: Config,
+        team_id: String,
+        team_name: String,
+        user_id: String,
+        user_name: String,
+        past: Duration,
+        poll: Duration,
+    ) -> Self {
         enable_raw_mode().expect("failed to enable raw mode");
         let mut stdout = io::stdout();
         crossterm::execute!(stdout, EnterAlternateScreen).expect("failed to enter alternate screen");
@@ -72,6 +82,7 @@ impl App {
             team_id,
             team_name,
             user_id,
+            user_name,
             terminal,
             command_buf: None,
             command_error: false,
@@ -480,6 +491,7 @@ impl App {
                 drain_elapsed: drain_start.map(|t| t.elapsed()),
             };
             let team_name = &self.team_name;
+            let user_name = &self.user_name;
             let active_categories = &self.active_categories;
             let show_uncategorised = self.show_uncategorised;
             self.terminal
@@ -495,6 +507,7 @@ impl App {
                         &mut list_state,
                         &poll_state,
                         team_name,
+                        user_name,
                         active_categories,
                         show_uncategorised,
                     );
@@ -573,19 +586,20 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
             let after = &result[start + 1..];
             let check = after.trim_start_matches('\u{E000}');
             if (check.starts_with("http://") || check.starts_with("https://") || check.starts_with("mailto:"))
-                && let Some(rel_end) = result[start..].find('>') {
-                    let end = start + rel_end;
-                    let inner = &result[start + 1..end];
-                    let clean = inner.replace(['\u{E000}', '\u{E001}'], "");
-                    let display = if let Some(pipe) = clean.find('|') {
-                        clean[pipe + 1..].to_string()
-                    } else {
-                        clean
-                    };
-                    result.replace_range(start..end + 1, &display);
-                    i = start + display.len();
-                    continue;
-                }
+                && let Some(rel_end) = result[start..].find('>')
+            {
+                let end = start + rel_end;
+                let inner = &result[start + 1..end];
+                let clean = inner.replace(['\u{E000}', '\u{E001}'], "");
+                let display = if let Some(pipe) = clean.find('|') {
+                    clean[pipe + 1..].to_string()
+                } else {
+                    clean
+                };
+                result.replace_range(start..end + 1, &display);
+                i = start + display.len();
+                continue;
+            }
             i = start + 1;
         } else {
             break;

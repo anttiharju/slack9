@@ -21,6 +21,7 @@ pub fn render(
     list_state: &mut ListState,
     poll: &header::PollState,
     team_name: &str,
+    user_name: &str,
     active_categories: &HashSet<String>,
     show_uncategorised: bool,
 ) {
@@ -31,7 +32,14 @@ pub fn render(
         .constraints([Constraint::Length(header::LOGO_HEIGHT), Constraint::Min(1)])
         .split(area);
 
-    header::render(frame, outer[0], Some(poll), &config.header.config_labels(), Some(team_name));
+    header::render(
+        frame,
+        outer[0],
+        Some(poll),
+        &config.header.config_labels(),
+        Some(team_name),
+        Some(user_name),
+    );
 
     // Commands hint on the same row as the poll indicator (last row of header)
     let mut spans = vec![Span::styled(
