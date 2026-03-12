@@ -20,8 +20,6 @@ pub enum TuiCommand {
     Poll { value: Option<String> },
     /// Set the past duration
     Time { value: Option<String> },
-    /// Search for messages by user
-    Search { query: Vec<String> },
     /// Quit the application
     Quit,
 }

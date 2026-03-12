@@ -151,11 +151,6 @@ impl App {
         }
     }
 
-    fn save_query(&mut self, queries: &[String]) {
-        self.config.state.search = Some(queries.to_vec());
-        let _ = config::save(&self.config);
-    }
-
     fn save_category_state(&mut self) {
         self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
         self.config.state.show_uncategorised = self.show_uncategorised;
@@ -213,7 +208,7 @@ impl App {
         }
     }
 
-    fn track(&mut self, mut source: MessageSource) -> TrackResult {
+    fn track(&mut self, source: MessageSource) -> TrackResult {
         let mut messages: Vec<TrackedMessage> = Vec::new();
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut last_poll: Option<Instant>;
@@ -221,7 +216,7 @@ impl App {
         let mut pending_g: Option<char> = None;
         let mut pending_o = false;
         let (tx, rx) = mpsc::channel::<(u64, Vec<TrackedMessage>)>();
-        let mut poll_generation: u64 = 0;
+        let poll_generation: u64 = 0;
         let mut poll_in_flight = false;
         let mut poll_fired_this_cycle = false;
         let mut drain_start: Option<Instant> = None;
@@ -242,9 +237,11 @@ impl App {
                 .iter()
                 .filter(|m| {
                     if let Some(f) = effective_channel_filter
-                        && !f.is_empty() && !m.channel_name.to_lowercase().contains(&f.to_lowercase()) {
-                            return false;
-                        }
+                        && !f.is_empty()
+                        && !m.channel_name.to_lowercase().contains(&f.to_lowercase())
+                    {
+                        return false;
+                    }
                     is_message_visible(m, &categories, &active_categories, show_uncategorised)
                 })
                 .count();
@@ -263,23 +260,6 @@ impl App {
                             }
                             if self.handle_config_command(&cmd) {
                                 handled = true;
-                            }
-
-                            if let Some(rest) = cmd.strip_prefix("search ") {
-                                let queries: Vec<String> = rest.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-                                if !queries.is_empty() {
-                                    self.save_query(&queries);
-                                    source = MessageSource::Search(queries);
-                                    messages.clear();
-                                    seen.clear();
-                                    last_poll = None;
-                                    list_state = ListState::default();
-                                    poll_generation += 1;
-                                    poll_in_flight = false;
-                                    poll_fired_this_cycle = false;
-                                    drain_start = None;
-                                    handled = true;
-                                }
                             }
                             if handled {
                                 self.command_buf = None;
@@ -302,7 +282,7 @@ impl App {
                         KeyCode::Char(c) => {
                             if c == ' ' && !buf.contains(' ') {
                                 let abbrev = buf.as_str();
-                                const COMMANDS: &[&str] = &["poll", "search", "time"];
+                                const COMMANDS: &[&str] = &["poll", "time"];
                                 let matches: Vec<&&str> = COMMANDS.iter().filter(|cmd| cmd.starts_with(abbrev)).collect();
                                 if matches.len() == 1 {
                                     buf.clear();
@@ -522,9 +502,11 @@ impl App {
                         return false;
                     }
                     if let Some(f) = effective_channel_filter
-                        && !f.is_empty() && !m.channel_name.to_lowercase().contains(&f.to_lowercase()) {
-                            return false;
-                        }
+                        && !f.is_empty()
+                        && !m.channel_name.to_lowercase().contains(&f.to_lowercase())
+                    {
+                        return false;
+                    }
                     is_message_visible(m, &categories, &active_categories, show_uncategorised)
                 })
                 .collect();
