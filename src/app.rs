@@ -1,5 +1,5 @@
 use crate::config::{self, Config};
-use crate::model::TrackedMessage;
+use crate::model::{TrackedMessage, effective_category};
 use crate::slack::SlackClient;
 use crate::view;
 use crate::view::header::wave_fraction;
@@ -494,7 +494,7 @@ impl App {
             // Build filtered visible messages for rendering
             let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - self.past.as_secs_f64();
             let effective_channel_filter = self.filter_buf.as_deref().or(self.channel_filter.as_deref());
-            let visible_messages: Vec<&TrackedMessage> = messages
+            let all_messages: Vec<&TrackedMessage> = messages
                 .iter()
                 .filter(|m| {
                     let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
@@ -507,8 +507,13 @@ impl App {
                     {
                         return false;
                     }
-                    is_message_visible(m, &categories, &active_categories, show_uncategorised)
+                    true
                 })
+                .collect();
+            let visible_messages: Vec<&TrackedMessage> = all_messages
+                .iter()
+                .filter(|m| is_message_visible(m, &categories, &active_categories, show_uncategorised))
+                .copied()
                 .collect();
 
             let command_buf_snapshot = self.command_buf.clone();
@@ -536,6 +541,7 @@ impl App {
                         command_error,
                         filter_buf_snapshot.as_deref(),
                         channel_filter_snapshot.as_deref(),
+                        &all_messages,
                         &visible_messages,
                         config,
                         &mut list_state,
@@ -549,27 +555,6 @@ impl App {
                 .expect("failed to draw");
         }
     }
-}
-
-/// Determine the single effective category for a message.
-///
-/// If the current user has reacted with a category emoji, the highest-priority
-/// matching user category wins. Otherwise, the highest-priority category from
-/// any reactor wins. Priority order: later in config = higher priority.
-fn effective_category(msg: &TrackedMessage, categories: &indexmap::IndexMap<String, Vec<String>>) -> Option<String> {
-    // Check user's own reactions first (highest priority = last in config → iterate reversed)
-    for (name, emojis) in categories.iter().rev() {
-        if msg.user_reaction_emojis.iter().any(|e| emojis.contains(e)) {
-            return Some(name.clone());
-        }
-    }
-    // Fall back to any reaction (highest priority = last in config)
-    for (name, emojis) in categories.iter().rev() {
-        if msg.reaction_emojis.iter().any(|e| emojis.contains(e)) {
-            return Some(name.clone());
-        }
-    }
-    None
 }
 
 /// Check whether a message should be visible with the current category filters.

@@ -1,5 +1,5 @@
 use crate::config::Config;
-use crate::model::TrackedMessage;
+use crate::model::{TrackedMessage, effective_category};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -17,7 +17,8 @@ pub fn render(
     command_buf: Option<&str>,
     command_error: bool,
     filter_buf: Option<&str>,
-    channel_filter: Option<&str>,
+    _channel_filter: Option<&str>,
+    all_messages: &[&TrackedMessage],
     messages: &[&TrackedMessage],
     config: &Config,
     list_state: &mut ListState,
@@ -98,10 +99,35 @@ pub fn render(
         })
         .collect();
 
-    let active_filter = filter_buf.or(channel_filter);
-    let title = match active_filter {
-        Some(f) if !f.is_empty() => format!(" search (/#{})", f),
-        _ => " search ".to_string(),
+    // Build top title with per-category message counts
+    let category_names: Vec<&String> = config.categories.keys().collect();
+    let title = if category_names.is_empty() {
+        String::from(" messages ")
+    } else {
+        let mut counts: Vec<(String, usize)> = Vec::new();
+        let mut uncategorised_count: usize = 0;
+        for msg in all_messages.iter() {
+            match effective_category(msg, &config.categories) {
+                Some(cat) => {
+                    if let Some(entry) = counts.iter_mut().find(|(n, _)| *n == cat) {
+                        entry.1 += 1;
+                    } else {
+                        counts.push((cat, 1));
+                    }
+                }
+                None => uncategorised_count += 1,
+            }
+        }
+        let mut parts: Vec<String> = category_names
+            .iter()
+            .map(|name| {
+                let count = counts.iter().find(|(n, _)| n == *name).map_or(0, |(_, c)| *c);
+                format!("{} {}", count, name)
+            })
+            .collect();
+        parts.push(format!("{} uncategorised", uncategorised_count));
+        let stats = parts.join(", ");
+        format!(" {} ", stats)
     };
 
     // Build bottom title for category toggles
