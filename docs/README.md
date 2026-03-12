@@ -27,9 +27,9 @@
 brew install anttiharju/tap/slack9
 ```
 
-or download a binary from GitHub releases.
+Or download a binary from GitHub releases.
 
-Also available via Nix at https://github.com/anttiharju/nur-packages
+Also available via Nix at https://github.com/anttiharju/nur-packages.
 
 ## Usage
 
@@ -46,7 +46,7 @@ export SLACK9_XOXC=xoxc-bar
 export SLACK9_XOXD=xoxd-baz
 ```
 
-and launch!
+and run:
 
 ```sh
 slack9
@@ -72,17 +72,17 @@ copy(JSON.parse(localStorage.getItem("localConfig_v2")).teams[Object.keys(JSON.p
 ```
 <!-- prettier-ignore-end -->
 
-and you have it copied in your clipboard.
+The token is copied to the clipboard.
 
 #### `SLACK9_XOXC`
 
 Dev Tools -> Application / Storage -> Cookies -> d
 
-This one you need to do manually.
+Copy the value manually.
 
 #### Revoke tokens
 
-Simply log out from the browser session from where you extracted the tokens.
+Log out from the browser session where the tokens were extracted.
 
 ## Configuration
 
@@ -155,7 +155,7 @@ direnv allow
 
 ### Nix cache setup
 
-To not have the Nix flake build things from scratch, you need to have the following extra cache substituters:
+To avoid building from scratch, add the following extra cache substituters:
 
 ```nix
 nixConfig.extra-substituters = [
@@ -176,7 +176,7 @@ accept-flake-config = true
 
 Details at https://blog.ielliott.io/per-project-nix-substituters.
 
-How to get started with Nix? Use:
+To get started with Nix:
 
 - https://github.com/NixOS/nix-installer
 - https://zero-to-nix.com
@@ -185,19 +185,19 @@ How to get started with Nix? Use:
 
 ### API logs
 
-Launch with `--debug` to store debug logs under `~/.config/slack9/`
+Launch with `--debug` to store debug logs under `$SLACK9_CONFIG_DIR`.
 
 ### Build results in ProcessFdQuotaExceeded
 
 - Related to https://github.com/ziglang/zig/issues/23273
 
-Simply run
+Run:
 
 ```sh
 ulimit -n 512
 ```
 
-This unfortunately cannot be packaged into the direnv setup.
+This cannot be packaged into the direnv setup.
 
 ## Acknowledgements
 
