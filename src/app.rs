@@ -182,6 +182,16 @@ impl App {
         MessageSource::Search(queries)
     }
 
+    /// Returns the user_pings query and display name if user_pings is enabled,
+    /// used to filter results from that query to only messages containing @user_name.
+    fn user_ping_filter(&self) -> Option<(String, String)> {
+        if self.config.state.user_pings {
+            Some((format!("<@{}>", self.user_id), self.user_name.clone()))
+        } else {
+            None
+        }
+    }
+
     fn active_show_emojis(&self) -> Vec<String> {
         let active = &self.active_categories;
         self.config
@@ -197,7 +207,8 @@ impl App {
     }
 
     fn poll_messages(&self, source: &MessageSource, messages: &mut Vec<TrackedMessage>, seen: &mut HashMap<String, usize>) {
-        let new_msgs = fetch_messages(&self.client, source, self.past);
+        let user_ping_filter = self.user_ping_filter();
+        let new_msgs = fetch_messages(&self.client, source, self.past, user_ping_filter.as_ref());
         messages.clear();
         seen.clear();
         for msg in new_msgs {
@@ -444,8 +455,9 @@ impl App {
                 let past = self.past;
                 let generation = poll_generation;
                 let tx = tx.clone();
+                let user_ping_filter = self.user_ping_filter();
                 std::thread::spawn(move || {
-                    let results = fetch_messages(&client, &source_clone, past);
+                    let results = fetch_messages(&client, &source_clone, past, user_ping_filter.as_ref());
                     let _ = tx.send((generation, results));
                 });
             }
@@ -641,13 +653,14 @@ fn resolve_mentions(client: &SlackClient, text: &str) -> String {
     result
 }
 
-fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) -> Vec<TrackedMessage> {
+fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration, user_ping_filter: Option<&(String, String)>) -> Vec<TrackedMessage> {
     let mut results = Vec::new();
     match source {
         MessageSource::Search(queries) => {
             let oldest = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64() - past.as_secs_f64();
             let mut seen_ts = std::collections::HashSet::new();
             for query in queries {
+                let is_user_ping_query = user_ping_filter.as_ref().is_some_and(|(q, _)| q == query);
                 if let Ok(resp) = client.search_modules_messages(query)
                     && let Some(items) = resp.items
                 {
@@ -670,6 +683,16 @@ fn fetch_messages(client: &SlackClient, source: &MessageSource, past: Duration) 
                                 while text.contains("  ") {
                                     text = text.replace("  ", " ");
                                 }
+
+                                // For user_pings query, only keep messages that mention @user_name
+                                if is_user_ping_query
+                                    && let Some((_, user_name)) = user_ping_filter {
+                                        let at_user = format!("@{}", user_name);
+                                        let text_clean = text.replace(['\u{E000}', '\u{E001}'], "");
+                                        if !text_clean.contains(&at_user) {
+                                            continue;
+                                        }
+                                    }
 
                                 let thread_ts = m.thread_ts.clone().or_else(|| {
                                     m.permalink.as_deref().and_then(|p| {
