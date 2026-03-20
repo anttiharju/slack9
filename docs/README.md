@@ -76,7 +76,7 @@ The token is copied to the clipboard.
 
 #### `SLACK9_XOXD`
 
-Dev Tools -> Application / Storage -> Cookies -> d
+Dev Tools -> Application (Chrome) / Storage (Safari) -> Cookies -> d
 
 Copy the value manually.
 
