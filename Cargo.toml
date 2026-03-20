@@ -1,0 +1,19 @@
+[package]
+license = "MIT"
+description = "rust-starter is a template for my Rust projects to make it easier to start new ones."
+repository = "https://github.com/anttiharju/rust-starter"
+readme = "docs/README.md"
+name = "rust-starter"
+version = "0.0.0"
+edition = "2024"
+include = [
+    "src/**",
+    "tests/**",
+]
+
+[dependencies]
+anstyle = "1.0.13"
+clap = { version = "4.5.57", features = ["cargo", "derive"] }
+
+[dev-dependencies]
+assert_cmd = "2.1.2"

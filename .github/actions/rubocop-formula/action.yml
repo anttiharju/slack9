@@ -1,0 +1,18 @@
+name: "Rubocop formula"
+description: "Run rubocop on the render formula"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Render out final formula
+      shell: sh
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        .release/render.sh brew
+    - name: rubocop
+      shell: sh
+      env:
+        repository: ${{ github.event.repository.name }}
+      run: |
+        rubocop ".release/brew/$repository.rb"
