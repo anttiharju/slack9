@@ -62,7 +62,7 @@ Three environment variables must be set:
 | `SLACK9_XOXD`      | Slack session token (used in Cookie header)             |
 | `SLACK9_XOXC`      | Slack OAuth token                                       |
 
-#### `SLACK9_XOXD`
+#### `SLACK9_XOXC`
 
 Dev Tools -> Console
 
@@ -74,7 +74,7 @@ copy(JSON.parse(localStorage.getItem("localConfig_v2")).teams[Object.keys(JSON.p
 
 The token is copied to the clipboard.
 
-#### `SLACK9_XOXC`
+#### `SLACK9_XOXD`
 
 Dev Tools -> Application / Storage -> Cookies -> d
 
