@@ -190,8 +190,15 @@ pub fn render(
             _ => "x",
         };
         let user_pings_check = if config.state.user_pings { "x" } else { " " };
+        let exclude_part = if config.filter.exclude.is_empty() {
+            String::new()
+        } else {
+            let exclude_check = if config.state.exclude_enabled { "x" } else { " " };
+            format!("E) exclude [{}] ", exclude_check)
+        };
         format!(
-            " U) user pings [{}] R) rollup reactions [{}] I) indirect (experimental) [{}], show categories: {} ",
+            " {}U) user pings [{}] R) rollup reactions [{}] I) indirect (experimental) [{}], show categories: {} ",
+            exclude_part,
             user_pings_check,
             rollup_check,
             indirect_check,

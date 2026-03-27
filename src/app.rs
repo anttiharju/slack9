@@ -44,6 +44,7 @@ pub struct App {
     show_uncategorised: bool,
     rollup_reactions: bool,
     indirect_mode: u8,
+    exclude_enabled: bool,
 }
 
 impl Drop for App {
@@ -85,6 +86,7 @@ impl App {
         let show_uncategorised = config.state.show_uncategorised;
         let rollup_reactions = config.state.rollup_reactions;
         let indirect_mode = config.state.indirect_mode;
+        let exclude_enabled = config.state.exclude_enabled;
 
         Self {
             client: Arc::new(client),
@@ -105,6 +107,7 @@ impl App {
             show_uncategorised,
             rollup_reactions,
             indirect_mode,
+            exclude_enabled,
         }
     }
 
@@ -163,6 +166,7 @@ impl App {
         self.config.state.show_uncategorised = self.show_uncategorised;
         self.config.state.rollup_reactions = self.rollup_reactions;
         self.config.state.indirect_mode = self.indirect_mode;
+        self.config.state.exclude_enabled = self.exclude_enabled;
         let _ = config::save(&self.config);
     }
 
@@ -252,6 +256,9 @@ impl App {
             let visible_count = messages
                 .iter()
                 .filter(|m| {
+                    if self.config.filter.is_excluded(&m.text, self.exclude_enabled) {
+                        return false;
+                    }
                     if (indirect_mode == 0 && m.is_indirect) || (indirect_mode == 2 && !m.is_indirect) {
                         return false;
                     }
@@ -411,6 +418,12 @@ impl App {
                             poll_fired_this_cycle = false;
                             drain_start = None;
                         }
+                        KeyCode::Char('E' | 'e') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.exclude_enabled = !self.exclude_enabled;
+                            self.save_category_state();
+                        }
                         KeyCode::Char(':') => {
                             pending_g = None;
                             pending_o = false;
@@ -465,6 +478,9 @@ impl App {
                                 let visible: Vec<&TrackedMessage> = messages
                                     .iter()
                                     .filter(|m| {
+                                        if self.config.filter.is_excluded(&m.text, self.exclude_enabled) {
+                                            return false;
+                                        }
                                         if (indirect_mode == 0 && m.is_indirect) || (indirect_mode == 2 && !m.is_indirect) {
                                             return false;
                                         }
@@ -566,6 +582,9 @@ impl App {
             let all_messages: Vec<&TrackedMessage> = messages
                 .iter()
                 .filter(|m| {
+                    if self.config.filter.is_excluded(&m.text, self.exclude_enabled) {
+                        return false;
+                    }
                     let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
                     if msg_ts < oldest {
                         return false;
