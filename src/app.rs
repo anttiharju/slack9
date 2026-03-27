@@ -43,7 +43,7 @@ pub struct App {
     active_categories: HashSet<String>,
     show_uncategorised: bool,
     rollup_reactions: bool,
-    show_indirect: bool,
+    indirect_mode: u8,
 }
 
 impl Drop for App {
@@ -84,7 +84,7 @@ impl App {
         };
         let show_uncategorised = config.state.show_uncategorised;
         let rollup_reactions = config.state.rollup_reactions;
-        let show_indirect = config.state.show_indirect;
+        let indirect_mode = config.state.indirect_mode;
 
         Self {
             client: Arc::new(client),
@@ -104,7 +104,7 @@ impl App {
             active_categories,
             show_uncategorised,
             rollup_reactions,
-            show_indirect,
+            indirect_mode,
         }
     }
 
@@ -162,7 +162,7 @@ impl App {
         self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
         self.config.state.show_uncategorised = self.show_uncategorised;
         self.config.state.rollup_reactions = self.rollup_reactions;
-        self.config.state.show_indirect = self.show_indirect;
+        self.config.state.indirect_mode = self.indirect_mode;
         let _ = config::save(&self.config);
     }
 
@@ -237,7 +237,7 @@ impl App {
             let show_uncategorised = self.show_uncategorised;
             let active_categories = self.active_categories.clone();
             let rollup_reactions = self.rollup_reactions;
-            let show_indirect = self.show_indirect;
+            let indirect_mode = self.indirect_mode;
             let root_by_ts: HashMap<String, usize> = if rollup_reactions {
                 messages
                     .iter()
@@ -252,7 +252,7 @@ impl App {
             let visible_count = messages
                 .iter()
                 .filter(|m| {
-                    if !show_indirect && m.is_indirect {
+                    if (indirect_mode == 0 && m.is_indirect) || (indirect_mode == 2 && !m.is_indirect) {
                         return false;
                     }
                     if let Some(f) = effective_channel_filter
@@ -399,7 +399,7 @@ impl App {
                         KeyCode::Char('I' | 'i') => {
                             pending_g = None;
                             pending_o = false;
-                            self.show_indirect = !self.show_indirect;
+                            self.indirect_mode = (self.indirect_mode + 1) % 3;
                             self.save_category_state();
                         }
                         KeyCode::Char(':') => {
@@ -456,7 +456,7 @@ impl App {
                                 let visible: Vec<&TrackedMessage> = messages
                                     .iter()
                                     .filter(|m| {
-                                        if !show_indirect && m.is_indirect {
+                                        if (indirect_mode == 0 && m.is_indirect) || (indirect_mode == 2 && !m.is_indirect) {
                                             return false;
                                         }
                                         if let Some(f) = effective_channel_filter
@@ -573,7 +573,7 @@ impl App {
             let visible_messages: Vec<&TrackedMessage> = all_messages
                 .iter()
                 .filter(|m| {
-                    if !show_indirect && m.is_indirect {
+                    if (indirect_mode == 0 && m.is_indirect) || (indirect_mode == 2 && !m.is_indirect) {
                         return false;
                     }
                     let src = get_category_source(m, rollup_reactions, &root_by_ts, &messages);
@@ -599,7 +599,7 @@ impl App {
             let active_categories = &self.active_categories;
             let show_uncategorised = self.show_uncategorised;
             let rollup_reactions = self.rollup_reactions;
-            let show_indirect = self.show_indirect;
+            let indirect_mode = self.indirect_mode;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -621,7 +621,7 @@ impl App {
                         active_categories,
                         show_uncategorised,
                         rollup_reactions,
-                        show_indirect,
+                        indirect_mode,
                     );
                 })
                 .expect("failed to draw");
