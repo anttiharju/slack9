@@ -674,14 +674,29 @@ fn get_category_source<'a>(
 
 fn resolve_mentions(client: &SlackClient, text: &str) -> String {
     let mut result = text.to_string();
-    // Resolve user mentions: <@U...>
+    // Resolve user/usergroup mentions: <@U...> or <@S...>
     while let Some(start) = result.find("<@") {
         if let Some(end) = result[start..].find('>') {
             let inner = &result[start + 2..start + end];
-            let user_id = inner.split('|').next().unwrap_or(inner);
+            let id_part = inner.split('|').next().unwrap_or(inner);
             let had_highlight = inner.contains('\u{E000}');
-            let user_id_clean = user_id.replace(['\u{E000}', '\u{E001}'], "");
-            let name = client.resolve_user(&user_id_clean);
+            let id_clean = id_part.replace(['\u{E000}', '\u{E001}'], "");
+            // S-prefixed IDs are usergroups, not users. For both kinds, prefer any
+            // label embedded in the mention over a cache lookup.
+            let name = if let Some(pipe) = inner.find('|') {
+                let label = inner[pipe + 1..].replace(['\u{E000}', '\u{E001}'], "");
+                if !label.is_empty() {
+                    label
+                } else if id_clean.starts_with('S') {
+                    client.resolve_usergroup(&id_clean)
+                } else {
+                    client.resolve_user(&id_clean)
+                }
+            } else if id_clean.starts_with('S') {
+                client.resolve_usergroup(&id_clean)
+            } else {
+                client.resolve_user(&id_clean)
+            };
             let replacement = if had_highlight {
                 format!("\u{E000}@{}\u{E001}", name)
             } else {
