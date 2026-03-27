@@ -42,6 +42,9 @@ pub struct App {
     poll: Duration,
     active_categories: HashSet<String>,
     show_uncategorised: bool,
+    rollup_reactions: bool,
+    indirect_mode: u8,
+    exclude_enabled: bool,
 }
 
 impl Drop for App {
@@ -81,6 +84,9 @@ impl App {
             None => config.categories.keys().cloned().collect(),
         };
         let show_uncategorised = config.state.show_uncategorised;
+        let rollup_reactions = config.state.rollup_reactions;
+        let indirect_mode = config.state.indirect_mode;
+        let exclude_enabled = config.state.exclude_enabled;
 
         Self {
             client: Arc::new(client),
@@ -99,6 +105,9 @@ impl App {
             poll,
             active_categories,
             show_uncategorised,
+            rollup_reactions,
+            indirect_mode,
+            exclude_enabled,
         }
     }
 
@@ -155,10 +164,13 @@ impl App {
     fn save_category_state(&mut self) {
         self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
         self.config.state.show_uncategorised = self.show_uncategorised;
+        self.config.state.rollup_reactions = self.rollup_reactions;
+        self.config.state.indirect_mode = self.indirect_mode;
+        self.config.state.exclude_enabled = self.exclude_enabled;
         let _ = config::save(&self.config);
     }
 
-    fn resolve_initial_source(&mut self) -> MessageSource {
+    fn resolve_initial_source(&self) -> MessageSource {
         let mut queries: Vec<String> = self
             .config
             .state
@@ -228,17 +240,36 @@ impl App {
             let categories = self.config.categories.clone();
             let show_uncategorised = self.show_uncategorised;
             let active_categories = self.active_categories.clone();
+            let rollup_reactions = self.rollup_reactions;
+            let indirect_mode = self.indirect_mode;
+            let root_by_ts: HashMap<String, usize> = if rollup_reactions {
+                messages
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, m)| m.thread_ts.as_deref().is_none_or(|tts| tts == m.ts.as_str()))
+                    .map(|(i, m)| (m.ts.clone(), i))
+                    .collect()
+            } else {
+                HashMap::new()
+            };
             let effective_channel_filter = self.filter_buf.as_deref().or(self.channel_filter.as_deref());
             let visible_count = messages
                 .iter()
                 .filter(|m| {
+                    if self.config.filter.is_excluded(&m.text, self.exclude_enabled) {
+                        return false;
+                    }
+                    if (indirect_mode == 0 && m.is_indirect) || (indirect_mode == 2 && !m.is_indirect) {
+                        return false;
+                    }
                     if let Some(f) = effective_channel_filter
                         && !f.is_empty()
                         && !m.channel_name.to_lowercase().contains(&f.to_lowercase())
                     {
                         return false;
                     }
-                    is_message_visible(m, &categories, &active_categories, show_uncategorised)
+                    let src = get_category_source(m, rollup_reactions, &root_by_ts, &messages);
+                    is_message_visible(src, &categories, &active_categories, show_uncategorised)
                 })
                 .count();
 
@@ -366,6 +397,33 @@ impl App {
                             pending_g = None;
                             pending_o = true;
                         }
+                        KeyCode::Char('R' | 'r') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.rollup_reactions = !self.rollup_reactions;
+                            self.save_category_state();
+                        }
+                        KeyCode::Char('I' | 'i') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.indirect_mode = (self.indirect_mode + 1) % 3;
+                            self.save_category_state();
+                        }
+                        KeyCode::Char('U' | 'u') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.config.state.user_pings = !self.config.state.user_pings;
+                            self.save_category_state();
+                            last_poll = None;
+                            poll_fired_this_cycle = false;
+                            drain_start = None;
+                        }
+                        KeyCode::Char('E' | 'e') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.exclude_enabled = !self.exclude_enabled;
+                            self.save_category_state();
+                        }
                         KeyCode::Char(':') => {
                             pending_g = None;
                             pending_o = false;
@@ -420,13 +478,20 @@ impl App {
                                 let visible: Vec<&TrackedMessage> = messages
                                     .iter()
                                     .filter(|m| {
+                                        if self.config.filter.is_excluded(&m.text, self.exclude_enabled) {
+                                            return false;
+                                        }
+                                        if (indirect_mode == 0 && m.is_indirect) || (indirect_mode == 2 && !m.is_indirect) {
+                                            return false;
+                                        }
                                         if let Some(f) = effective_channel_filter
                                             && !f.is_empty()
                                             && !m.channel_name.to_lowercase().contains(&f.to_lowercase())
                                         {
                                             return false;
                                         }
-                                        is_message_visible(m, &categories, &active_categories, show_uncategorised)
+                                        let src = get_category_source(m, rollup_reactions, &root_by_ts, &messages);
+                                        is_message_visible(src, &categories, &active_categories, show_uncategorised)
                                     })
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
@@ -474,7 +539,7 @@ impl App {
                 poll_in_flight = true;
                 poll_fired_this_cycle = true;
                 let client = Arc::clone(&self.client);
-                let source_clone = source.clone();
+                let source_clone = self.resolve_initial_source();
                 let past = self.past;
                 let generation = poll_generation;
                 let tx = tx.clone();
@@ -517,6 +582,9 @@ impl App {
             let all_messages: Vec<&TrackedMessage> = messages
                 .iter()
                 .filter(|m| {
+                    if self.config.filter.is_excluded(&m.text, self.exclude_enabled) {
+                        return false;
+                    }
                     let msg_ts: f64 = m.ts.parse().unwrap_or(0.0);
                     if msg_ts < oldest {
                         return false;
@@ -532,7 +600,13 @@ impl App {
                 .collect();
             let visible_messages: Vec<&TrackedMessage> = all_messages
                 .iter()
-                .filter(|m| is_message_visible(m, &categories, &active_categories, show_uncategorised))
+                .filter(|m| {
+                    if (indirect_mode == 0 && m.is_indirect) || (indirect_mode == 2 && !m.is_indirect) {
+                        return false;
+                    }
+                    let src = get_category_source(m, rollup_reactions, &root_by_ts, &messages);
+                    is_message_visible(src, &categories, &active_categories, show_uncategorised)
+                })
                 .copied()
                 .collect();
 
@@ -552,6 +626,8 @@ impl App {
             let user_name = &self.user_name;
             let active_categories = &self.active_categories;
             let show_uncategorised = self.show_uncategorised;
+            let rollup_reactions = self.rollup_reactions;
+            let indirect_mode = self.indirect_mode;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -572,6 +648,8 @@ impl App {
                         user_name,
                         active_categories,
                         show_uncategorised,
+                        rollup_reactions,
+                        indirect_mode,
                     );
                 })
                 .expect("failed to draw");
@@ -592,16 +670,61 @@ fn is_message_visible(
     }
 }
 
+/// Recursively check whether a JSON value contains a highlight marker (\u{E000}) anywhere.
+fn has_highlight_in_value(v: &serde_json::Value) -> bool {
+    match v {
+        serde_json::Value::String(s) => s.contains('\u{E000}'),
+        serde_json::Value::Array(arr) => arr.iter().any(has_highlight_in_value),
+        serde_json::Value::Object(obj) => obj.values().any(has_highlight_in_value),
+        _ => false,
+    }
+}
+
+/// When rollup mode is on, return the thread root message to use for categorization.
+/// A reply is identified by having a `thread_ts` that differs from its own `ts`.
+/// Falls back to `msg` itself if no root is found.
+fn get_category_source<'a>(
+    msg: &'a TrackedMessage,
+    rollup_reactions: bool,
+    root_by_ts: &HashMap<String, usize>,
+    messages: &'a [TrackedMessage],
+) -> &'a TrackedMessage {
+    if rollup_reactions
+        && let Some(thread_ts) = &msg.thread_ts
+        && thread_ts != &msg.ts
+        && let Some(&idx) = root_by_ts.get(thread_ts)
+        && let Some(root) = messages.get(idx)
+    {
+        return root;
+    }
+    msg
+}
+
 fn resolve_mentions(client: &SlackClient, text: &str) -> String {
     let mut result = text.to_string();
-    // Resolve user mentions: <@U...>
+    // Resolve user/usergroup mentions: <@U...> or <@S...>
     while let Some(start) = result.find("<@") {
         if let Some(end) = result[start..].find('>') {
             let inner = &result[start + 2..start + end];
-            let user_id = inner.split('|').next().unwrap_or(inner);
+            let id_part = inner.split('|').next().unwrap_or(inner);
             let had_highlight = inner.contains('\u{E000}');
-            let user_id_clean = user_id.replace(['\u{E000}', '\u{E001}'], "");
-            let name = client.resolve_user(&user_id_clean);
+            let id_clean = id_part.replace(['\u{E000}', '\u{E001}'], "");
+            // S-prefixed IDs are usergroups, not users. For both kinds, prefer any
+            // label embedded in the mention over a cache lookup.
+            let name = if let Some(pipe) = inner.find('|') {
+                let label = inner[pipe + 1..].replace(['\u{E000}', '\u{E001}'], "");
+                if !label.is_empty() {
+                    label
+                } else if id_clean.starts_with('S') {
+                    client.resolve_usergroup(&id_clean)
+                } else {
+                    client.resolve_user(&id_clean)
+                }
+            } else if id_clean.starts_with('S') {
+                client.resolve_usergroup(&id_clean)
+            } else {
+                client.resolve_user(&id_clean)
+            };
             let replacement = if had_highlight {
                 format!("\u{E000}@{}\u{E001}", name)
             } else {
@@ -746,6 +869,28 @@ fn fetch_messages(
                                     .filter(|r| r.users.as_ref().is_some_and(|u| u.contains(&current_user_id.to_string())))
                                     .map(|r| r.name.clone())
                                     .collect();
+                                // A message is "indirect" when the search matched only via a
+                                // *message unfurl* attachment rather than the message body itself.
+                                // We check three direct-match signals before flagging:
+                                //   1. top-level extracts non-empty (Slack's own direct-match list)
+                                //   2. top-level text contains highlight markers (\u{E000})
+                                //   3. a non-unfurl attachment's extracts contain highlight markers
+                                //      (e.g. bot messages whose content lives in attachment blocks)
+                                // Only then check if any attachment is a message unfurl — that is
+                                // the only source of true indirect matches.
+                                let attachment_has_direct_match = m.attachments.iter().any(|att| {
+                                    if att.get("is_msg_unfurl").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                        return false;
+                                    }
+                                    att.get("extracts").is_some_and(has_highlight_in_value)
+                                });
+                                let has_direct_match =
+                                    !m.extracts.is_empty() || m.text.as_deref().unwrap_or("").contains('\u{E000}') || attachment_has_direct_match;
+                                let has_msg_unfurl = m
+                                    .attachments
+                                    .iter()
+                                    .any(|att| att.get("is_msg_unfurl").and_then(|v| v.as_bool()).unwrap_or(false));
+                                let is_indirect = !has_direct_match && has_msg_unfurl;
                                 let user_id_str = m.user.as_deref().unwrap_or("unknown");
                                 let display_name = client.resolve_user(user_id_str);
                                 let raw_text = m.effective_text();
@@ -780,6 +925,7 @@ fn fetch_messages(
                                     text,
                                     reaction_emojis,
                                     user_reaction_emojis,
+                                    is_indirect,
                                 });
                             }
                         }

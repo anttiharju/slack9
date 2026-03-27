@@ -8,6 +8,10 @@ pub struct TrackedMessage {
     pub reaction_emojis: Vec<String>,
     /// Reaction emojis placed by the current user (subset of reaction_emojis).
     pub user_reaction_emojis: Vec<String>,
+    /// True when this message was returned by the search only because an attachment/unfurl
+    /// it contains links to another message that matched — not because this message's own
+    /// text matched the query.
+    pub is_indirect: bool,
 }
 
 /// Determine the single effective category for a message.

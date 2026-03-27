@@ -81,6 +81,8 @@ pub struct SearchModulesMessage {
     pub blocks: Vec<Value>,
     #[serde(default)]
     pub attachments: Vec<Value>,
+    #[serde(default)]
+    pub extracts: Vec<Value>,
 }
 
 impl SearchModulesMessage {
