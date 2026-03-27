@@ -186,7 +186,7 @@ pub fn render(
         let rollup_check = if rollup_reactions { "x" } else { " " };
         let indirect_check = if show_indirect { "x" } else { " " };
         format!(
-            " R) rollup reactions [{}] I) (experimental) indirect [{}], show categories: {} ",
+            " R) rollup reactions [{}] I) indirect (experimental) [{}], show categories: {} ",
             rollup_check,
             indirect_check,
             toggles.join(" ")
