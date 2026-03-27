@@ -189,8 +189,10 @@ pub fn render(
             2 => "X",
             _ => "x",
         };
+        let user_pings_check = if config.state.user_pings { "x" } else { " " };
         format!(
-            " R) rollup reactions [{}] I) indirect (experimental) [{}], show categories: {} ",
+            " U) user pings [{}] R) rollup reactions [{}] I) indirect (experimental) [{}], show categories: {} ",
+            user_pings_check,
             rollup_check,
             indirect_check,
             toggles.join(" ")

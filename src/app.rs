@@ -166,7 +166,7 @@ impl App {
         let _ = config::save(&self.config);
     }
 
-    fn resolve_initial_source(&mut self) -> MessageSource {
+    fn resolve_initial_source(&self) -> MessageSource {
         let mut queries: Vec<String> = self
             .config
             .state
@@ -402,6 +402,15 @@ impl App {
                             self.indirect_mode = (self.indirect_mode + 1) % 3;
                             self.save_category_state();
                         }
+                        KeyCode::Char('U' | 'u') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.config.state.user_pings = !self.config.state.user_pings;
+                            self.save_category_state();
+                            last_poll = None;
+                            poll_fired_this_cycle = false;
+                            drain_start = None;
+                        }
                         KeyCode::Char(':') => {
                             pending_g = None;
                             pending_o = false;
@@ -514,7 +523,7 @@ impl App {
                 poll_in_flight = true;
                 poll_fired_this_cycle = true;
                 let client = Arc::clone(&self.client);
-                let source_clone = source.clone();
+                let source_clone = self.resolve_initial_source();
                 let past = self.past;
                 let generation = poll_generation;
                 let tx = tx.clone();
