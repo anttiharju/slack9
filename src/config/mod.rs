@@ -41,6 +41,8 @@ pub struct StateConfig {
     pub show_uncategorised: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub rollup_reactions: bool,
+    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    pub show_indirect: bool,
 }
 
 fn default_true() -> bool {
@@ -53,7 +55,12 @@ fn is_true(v: &bool) -> bool {
 
 impl StateConfig {
     fn is_default(&self) -> bool {
-        !self.user_pings && self.search.is_none() && self.active_categories.is_none() && self.show_uncategorised && !self.rollup_reactions
+        !self.user_pings
+            && self.search.is_none()
+            && self.active_categories.is_none()
+            && self.show_uncategorised
+            && !self.rollup_reactions
+            && self.show_indirect
     }
 }
 

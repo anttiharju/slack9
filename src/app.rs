@@ -43,6 +43,7 @@ pub struct App {
     active_categories: HashSet<String>,
     show_uncategorised: bool,
     rollup_reactions: bool,
+    show_indirect: bool,
 }
 
 impl Drop for App {
@@ -83,6 +84,7 @@ impl App {
         };
         let show_uncategorised = config.state.show_uncategorised;
         let rollup_reactions = config.state.rollup_reactions;
+        let show_indirect = config.state.show_indirect;
 
         Self {
             client: Arc::new(client),
@@ -102,6 +104,7 @@ impl App {
             active_categories,
             show_uncategorised,
             rollup_reactions,
+            show_indirect,
         }
     }
 
@@ -159,6 +162,7 @@ impl App {
         self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
         self.config.state.show_uncategorised = self.show_uncategorised;
         self.config.state.rollup_reactions = self.rollup_reactions;
+        self.config.state.show_indirect = self.show_indirect;
         let _ = config::save(&self.config);
     }
 
@@ -233,6 +237,7 @@ impl App {
             let show_uncategorised = self.show_uncategorised;
             let active_categories = self.active_categories.clone();
             let rollup_reactions = self.rollup_reactions;
+            let show_indirect = self.show_indirect;
             let root_by_ts: HashMap<String, usize> = if rollup_reactions {
                 messages
                     .iter()
@@ -247,6 +252,9 @@ impl App {
             let visible_count = messages
                 .iter()
                 .filter(|m| {
+                    if !show_indirect && m.is_indirect {
+                        return false;
+                    }
                     if let Some(f) = effective_channel_filter
                         && !f.is_empty()
                         && !m.channel_name.to_lowercase().contains(&f.to_lowercase())
@@ -388,6 +396,12 @@ impl App {
                             self.rollup_reactions = !self.rollup_reactions;
                             self.save_category_state();
                         }
+                        KeyCode::Char('I' | 'i') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.show_indirect = !self.show_indirect;
+                            self.save_category_state();
+                        }
                         KeyCode::Char(':') => {
                             pending_g = None;
                             pending_o = false;
@@ -442,6 +456,9 @@ impl App {
                                 let visible: Vec<&TrackedMessage> = messages
                                     .iter()
                                     .filter(|m| {
+                                        if !show_indirect && m.is_indirect {
+                                            return false;
+                                        }
                                         if let Some(f) = effective_channel_filter
                                             && !f.is_empty()
                                             && !m.channel_name.to_lowercase().contains(&f.to_lowercase())
@@ -556,6 +573,9 @@ impl App {
             let visible_messages: Vec<&TrackedMessage> = all_messages
                 .iter()
                 .filter(|m| {
+                    if !show_indirect && m.is_indirect {
+                        return false;
+                    }
                     let src = get_category_source(m, rollup_reactions, &root_by_ts, &messages);
                     is_message_visible(src, &categories, &active_categories, show_uncategorised)
                 })
@@ -579,6 +599,7 @@ impl App {
             let active_categories = &self.active_categories;
             let show_uncategorised = self.show_uncategorised;
             let rollup_reactions = self.rollup_reactions;
+            let show_indirect = self.show_indirect;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -600,6 +621,7 @@ impl App {
                         active_categories,
                         show_uncategorised,
                         rollup_reactions,
+                        show_indirect,
                     );
                 })
                 .expect("failed to draw");
@@ -620,6 +642,16 @@ fn is_message_visible(
     }
 }
 
+/// Recursively check whether a JSON value contains a highlight marker (\u{E000}) anywhere.
+fn has_highlight_in_value(v: &serde_json::Value) -> bool {
+    match v {
+        serde_json::Value::String(s) => s.contains('\u{E000}'),
+        serde_json::Value::Array(arr) => arr.iter().any(has_highlight_in_value),
+        serde_json::Value::Object(obj) => obj.values().any(has_highlight_in_value),
+        _ => false,
+    }
+}
+
 /// When rollup mode is on, return the thread root message to use for categorization.
 /// A reply is identified by having a `thread_ts` that differs from its own `ts`.
 /// Falls back to `msg` itself if no root is found.
@@ -631,11 +663,12 @@ fn get_category_source<'a>(
 ) -> &'a TrackedMessage {
     if rollup_reactions
         && let Some(thread_ts) = &msg.thread_ts
-            && thread_ts != &msg.ts
-                && let Some(&idx) = root_by_ts.get(thread_ts)
-                    && let Some(root) = messages.get(idx) {
-                        return root;
-                    }
+        && thread_ts != &msg.ts
+        && let Some(&idx) = root_by_ts.get(thread_ts)
+        && let Some(root) = messages.get(idx)
+    {
+        return root;
+    }
     msg
 }
 
@@ -793,6 +826,28 @@ fn fetch_messages(
                                     .filter(|r| r.users.as_ref().is_some_and(|u| u.contains(&current_user_id.to_string())))
                                     .map(|r| r.name.clone())
                                     .collect();
+                                // A message is "indirect" when the search matched only via a
+                                // *message unfurl* attachment rather than the message body itself.
+                                // We check three direct-match signals before flagging:
+                                //   1. top-level extracts non-empty (Slack's own direct-match list)
+                                //   2. top-level text contains highlight markers (\u{E000})
+                                //   3. a non-unfurl attachment's extracts contain highlight markers
+                                //      (e.g. bot messages whose content lives in attachment blocks)
+                                // Only then check if any attachment is a message unfurl — that is
+                                // the only source of true indirect matches.
+                                let attachment_has_direct_match = m.attachments.iter().any(|att| {
+                                    if att.get("is_msg_unfurl").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                        return false;
+                                    }
+                                    att.get("extracts").is_some_and(has_highlight_in_value)
+                                });
+                                let has_direct_match =
+                                    !m.extracts.is_empty() || m.text.as_deref().unwrap_or("").contains('\u{E000}') || attachment_has_direct_match;
+                                let has_msg_unfurl = m
+                                    .attachments
+                                    .iter()
+                                    .any(|att| att.get("is_msg_unfurl").and_then(|v| v.as_bool()).unwrap_or(false));
+                                let is_indirect = !has_direct_match && has_msg_unfurl;
                                 let user_id_str = m.user.as_deref().unwrap_or("unknown");
                                 let display_name = client.resolve_user(user_id_str);
                                 let raw_text = m.effective_text();
@@ -827,6 +882,7 @@ fn fetch_messages(
                                     text,
                                     reaction_emojis,
                                     user_reaction_emojis,
+                                    is_indirect,
                                 });
                             }
                         }

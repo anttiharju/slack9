@@ -29,6 +29,7 @@ pub fn render(
     active_categories: &HashSet<String>,
     show_uncategorised: bool,
     rollup_reactions: bool,
+    show_indirect: bool,
 ) {
     let has_filter_visible = filter_buf.is_some() || channel_filter.is_some_and(|f| !f.is_empty());
     let has_command = command_buf.is_some();
@@ -132,6 +133,9 @@ pub fn render(
         let mut counts: Vec<(String, usize)> = Vec::new();
         let mut uncategorised_count: usize = 0;
         for msg in all_messages.iter() {
+            if !show_indirect && msg.is_indirect {
+                continue;
+            }
             let effective: &TrackedMessage = if rollup_reactions {
                 msg.thread_ts
                     .as_ref()
@@ -180,7 +184,13 @@ pub fn render(
         let uncategorised_check = if show_uncategorised { "x" } else { " " };
         toggles.push(format!("0) uncategorised [{}]", uncategorised_check));
         let rollup_check = if rollup_reactions { "x" } else { " " };
-        format!(" R) rollup reactions [{}], show categories: {} ", rollup_check, toggles.join(" "))
+        let indirect_check = if show_indirect { "x" } else { " " };
+        format!(
+            " R) rollup reactions [{}] I) (experimental) indirect [{}], show categories: {} ",
+            rollup_check,
+            indirect_check,
+            toggles.join(" ")
+        )
     };
 
     let list_border_color = if overlay_count > 0 { Color::Blue } else { Color::Cyan };
