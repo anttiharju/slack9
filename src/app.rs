@@ -42,6 +42,7 @@ pub struct App {
     poll: Duration,
     active_categories: HashSet<String>,
     show_uncategorised: bool,
+    rollup_reactions: bool,
 }
 
 impl Drop for App {
@@ -81,6 +82,7 @@ impl App {
             None => config.categories.keys().cloned().collect(),
         };
         let show_uncategorised = config.state.show_uncategorised;
+        let rollup_reactions = config.state.rollup_reactions;
 
         Self {
             client: Arc::new(client),
@@ -99,6 +101,7 @@ impl App {
             poll,
             active_categories,
             show_uncategorised,
+            rollup_reactions,
         }
     }
 
@@ -155,6 +158,7 @@ impl App {
     fn save_category_state(&mut self) {
         self.config.state.active_categories = Some(self.active_categories.iter().cloned().collect());
         self.config.state.show_uncategorised = self.show_uncategorised;
+        self.config.state.rollup_reactions = self.rollup_reactions;
         let _ = config::save(&self.config);
     }
 
@@ -228,6 +232,17 @@ impl App {
             let categories = self.config.categories.clone();
             let show_uncategorised = self.show_uncategorised;
             let active_categories = self.active_categories.clone();
+            let rollup_reactions = self.rollup_reactions;
+            let root_by_ts: HashMap<String, usize> = if rollup_reactions {
+                messages
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, m)| m.thread_ts.as_deref().is_none_or(|tts| tts == m.ts.as_str()))
+                    .map(|(i, m)| (m.ts.clone(), i))
+                    .collect()
+            } else {
+                HashMap::new()
+            };
             let effective_channel_filter = self.filter_buf.as_deref().or(self.channel_filter.as_deref());
             let visible_count = messages
                 .iter()
@@ -238,7 +253,8 @@ impl App {
                     {
                         return false;
                     }
-                    is_message_visible(m, &categories, &active_categories, show_uncategorised)
+                    let src = get_category_source(m, rollup_reactions, &root_by_ts, &messages);
+                    is_message_visible(src, &categories, &active_categories, show_uncategorised)
                 })
                 .count();
 
@@ -366,6 +382,12 @@ impl App {
                             pending_g = None;
                             pending_o = true;
                         }
+                        KeyCode::Char('R' | 'r') => {
+                            pending_g = None;
+                            pending_o = false;
+                            self.rollup_reactions = !self.rollup_reactions;
+                            self.save_category_state();
+                        }
                         KeyCode::Char(':') => {
                             pending_g = None;
                             pending_o = false;
@@ -426,7 +448,8 @@ impl App {
                                         {
                                             return false;
                                         }
-                                        is_message_visible(m, &categories, &active_categories, show_uncategorised)
+                                        let src = get_category_source(m, rollup_reactions, &root_by_ts, &messages);
+                                        is_message_visible(src, &categories, &active_categories, show_uncategorised)
                                     })
                                     .collect();
                                 if let Some(msg) = visible.get(selected) {
@@ -532,7 +555,10 @@ impl App {
                 .collect();
             let visible_messages: Vec<&TrackedMessage> = all_messages
                 .iter()
-                .filter(|m| is_message_visible(m, &categories, &active_categories, show_uncategorised))
+                .filter(|m| {
+                    let src = get_category_source(m, rollup_reactions, &root_by_ts, &messages);
+                    is_message_visible(src, &categories, &active_categories, show_uncategorised)
+                })
                 .copied()
                 .collect();
 
@@ -552,6 +578,7 @@ impl App {
             let user_name = &self.user_name;
             let active_categories = &self.active_categories;
             let show_uncategorised = self.show_uncategorised;
+            let rollup_reactions = self.rollup_reactions;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -572,6 +599,7 @@ impl App {
                         user_name,
                         active_categories,
                         show_uncategorised,
+                        rollup_reactions,
                     );
                 })
                 .expect("failed to draw");
@@ -590,6 +618,25 @@ fn is_message_visible(
         Some(cat) => active_categories.contains(&cat),
         None => show_uncategorised,
     }
+}
+
+/// When rollup mode is on, return the thread root message to use for categorization.
+/// A reply is identified by having a `thread_ts` that differs from its own `ts`.
+/// Falls back to `msg` itself if no root is found.
+fn get_category_source<'a>(
+    msg: &'a TrackedMessage,
+    rollup_reactions: bool,
+    root_by_ts: &HashMap<String, usize>,
+    messages: &'a [TrackedMessage],
+) -> &'a TrackedMessage {
+    if rollup_reactions
+        && let Some(thread_ts) = &msg.thread_ts
+            && thread_ts != &msg.ts
+                && let Some(&idx) = root_by_ts.get(thread_ts)
+                    && let Some(root) = messages.get(idx) {
+                        return root;
+                    }
+    msg
 }
 
 fn resolve_mentions(client: &SlackClient, text: &str) -> String {

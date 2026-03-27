@@ -5,7 +5,7 @@ use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::{command_bar, filter_bar, header};
 use crate::cli;
@@ -28,6 +28,7 @@ pub fn render(
     user_name: &str,
     active_categories: &HashSet<String>,
     show_uncategorised: bool,
+    rollup_reactions: bool,
 ) {
     let has_filter_visible = filter_buf.is_some() || channel_filter.is_some_and(|f| !f.is_empty());
     let has_command = command_buf.is_some();
@@ -115,6 +116,15 @@ pub fn render(
         .collect();
 
     // Build top title with per-category message counts
+    let root_by_ts: HashMap<&str, &TrackedMessage> = if rollup_reactions {
+        all_messages
+            .iter()
+            .filter(|m| m.thread_ts.as_deref().is_none_or(|tts| tts == m.ts.as_str()))
+            .map(|m| (m.ts.as_str(), *m))
+            .collect()
+    } else {
+        HashMap::new()
+    };
     let category_names: Vec<&String> = config.categories.keys().collect();
     let title = if category_names.is_empty() {
         String::from(" messages ")
@@ -122,7 +132,16 @@ pub fn render(
         let mut counts: Vec<(String, usize)> = Vec::new();
         let mut uncategorised_count: usize = 0;
         for msg in all_messages.iter() {
-            match effective_category(msg, &config.categories) {
+            let effective: &TrackedMessage = if rollup_reactions {
+                msg.thread_ts
+                    .as_ref()
+                    .filter(|tts| tts.as_str() != msg.ts.as_str())
+                    .and_then(|tts| root_by_ts.get(tts.as_str()).copied())
+                    .unwrap_or(*msg)
+            } else {
+                msg
+            };
+            match effective_category(effective, &config.categories) {
                 Some(cat) => {
                     if let Some(entry) = counts.iter_mut().find(|(n, _)| *n == cat) {
                         entry.1 += 1;
@@ -160,7 +179,8 @@ pub fn render(
             .collect();
         let uncategorised_check = if show_uncategorised { "x" } else { " " };
         toggles.push(format!("0) uncategorised [{}]", uncategorised_check));
-        format!(" show categories: {} ", toggles.join(" "))
+        let rollup_check = if rollup_reactions { "x" } else { " " };
+        format!(" R) rollup reactions [{}], show categories: {} ", rollup_check, toggles.join(" "))
     };
 
     let list_border_color = if overlay_count > 0 { Color::Blue } else { Color::Cyan };
