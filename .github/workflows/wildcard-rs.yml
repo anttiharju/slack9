@@ -7,7 +7,7 @@ on:
       - wildcard
     paths:
       - ".github/workflows/wildcard-rs.yml"
-      - "**.rs"
+      - "**/*.rs"
       - "Cargo.lock"
       - "Cargo.toml"
       - "flake.lock"
