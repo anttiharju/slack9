@@ -21,6 +21,8 @@ rustPlatform.buildRustPackage rec {
     lockFile = ./Cargo.lock;
   };
 
+  cargoBuildFlags = [ "--all-features" ];
+
   meta = {
     homepage = "${PKG_HOMEPAGE}";
     description = "${PKG_DESC}";
