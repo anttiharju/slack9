@@ -70,7 +70,7 @@
           # Everything below is required by GitHub Actions
           uutils-coreutils-noprefix
           bash
-          git
+          gitMinimal # With plain 'git' perl etc. get bundled in
           findutils
           gnutar
           curl
