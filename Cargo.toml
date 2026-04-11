@@ -5,7 +5,7 @@ homepage = "https://anttiharju.dev/slack9/"
 repository = "https://github.com/anttiharju/slack9"
 readme = "docs/README.md"
 name = "slack9"
-version = "0.5.2"
+version = "0.5.3"
 edition = "2024"
 include = ["src/**", "tests/**"]
 
