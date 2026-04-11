@@ -1,6 +1,7 @@
 [package]
 license = "MIT"
 description = "slack9 is a template for my Rust projects to make it easier to start new ones."
+homepage = "https://anttiharju.dev/slack9/"
 repository = "https://github.com/anttiharju/slack9"
 readme = "docs/README.md"
 name = "slack9"

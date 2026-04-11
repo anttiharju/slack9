@@ -6,11 +6,11 @@ on:
     branches:
       - wildcard
     paths:
-      - "docs/**/*"
-      - "mkdocs.yml"
+      - "docs/**"
+      - "zensical.toml"
       - "flake.nix"
       - "flake.lock"
-      - ".github/workflows/wildcard-mkdocs.yml"
+      - ".github/workflows/wildcard-zensical.yml"
 jobs:
   wildcard:
     runs-on: ubuntu-latest
