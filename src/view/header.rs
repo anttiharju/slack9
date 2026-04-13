@@ -1,9 +1,11 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use std::time::Duration;
+
+use super::Palette;
 
 const SMALL_LOGO: &str = include_str!("header_logo.txt");
 
@@ -45,12 +47,13 @@ pub fn render(
     config_labels: &[(&str, String)],
     workspace_label: Option<&str>,
     user_label: Option<&str>,
+    palette: &Palette,
 ) {
     let logo_width = SMALL_LOGO.lines().map(|l| l.len()).max().unwrap_or(0) as u16;
     let lines: Vec<Line> = SMALL_LOGO
         .lines()
         .filter(|l| !l.is_empty())
-        .map(|l| Line::from(Span::styled(l, Style::default().fg(Color::Rgb(255, 165, 0)))))
+        .map(|l| Line::from(Span::styled(l, Style::default().fg(palette.accent))))
         .collect();
 
     let x = area.right().saturating_sub(logo_width).saturating_sub(1);
@@ -63,8 +66,8 @@ pub fn render(
     // Workspace label in top-left
     if let Some(name) = workspace_label {
         let label_line = Line::from(vec![
-            Span::styled("Workspace ", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
-            Span::styled(name, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled("Workspace ", Style::default().fg(palette.accent).add_modifier(Modifier::BOLD)),
+            Span::styled(name, Style::default().fg(palette.text).add_modifier(Modifier::BOLD)),
         ]);
         let label_area = Rect::new(area.x, area.y, area.width.saturating_sub(logo_width + 1), 1);
         frame.render_widget(Paragraph::new(label_line), label_area);
@@ -73,8 +76,8 @@ pub fn render(
     // User label below workspace
     if let Some(name) = user_label {
         let label_line = Line::from(vec![
-            Span::styled("User ", Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD)),
-            Span::styled(name, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+            Span::styled("User ", Style::default().fg(palette.accent).add_modifier(Modifier::BOLD)),
+            Span::styled(name, Style::default().fg(palette.text).add_modifier(Modifier::BOLD)),
         ]);
         let label_area = Rect::new(area.x, area.y + 1, area.width.saturating_sub(logo_width + 1), 1);
         frame.render_widget(Paragraph::new(label_line), label_area);
@@ -83,17 +86,14 @@ pub fn render(
     // Config labels on rows below user
     for (i, (name, value)) in config_labels.iter().enumerate() {
         let title = format!("{}{} ", name.chars().next().unwrap_or_default().to_uppercase(), &name[1..]);
-        let mut spans = vec![Span::styled(
-            title,
-            Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
-        )];
+        let mut spans = vec![Span::styled(title, Style::default().fg(palette.accent).add_modifier(Modifier::BOLD))];
         if let Some(val) = value.strip_suffix(" (default)") {
-            spans.push(Span::styled(val, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
-            spans.push(Span::styled(" (default)", Style::default().fg(Color::DarkGray)));
+            spans.push(Span::styled(val, Style::default().fg(palette.text).add_modifier(Modifier::BOLD)));
+            spans.push(Span::styled(" (default)", Style::default().fg(palette.text_muted)));
         } else {
             spans.push(Span::styled(
                 value.as_str(),
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                Style::default().fg(palette.text).add_modifier(Modifier::BOLD),
             ));
         }
         let label_line = Line::from(spans);
@@ -175,7 +175,7 @@ pub fn render(
             }
         }
 
-        let spans = vec![Span::styled(bar, Style::default().fg(Color::DarkGray))];
+        let spans = vec![Span::styled(bar, Style::default().fg(palette.poll_bar))];
         let status_line = Paragraph::new(Line::from(spans));
         frame.render_widget(status_line, bar_area);
     }

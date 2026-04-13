@@ -2,12 +2,12 @@ use crate::config::Config;
 use crate::model::{TrackedMessage, effective_category};
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Padding};
 use std::collections::{HashMap, HashSet};
 
-use super::{command_bar, filter_bar, header};
+use super::{Palette, command_bar, filter_bar, header};
 use crate::cli;
 
 #[allow(clippy::too_many_arguments)]
@@ -30,6 +30,7 @@ pub fn render(
     show_uncategorised: bool,
     rollup_reactions: bool,
     indirect_mode: u8,
+    palette: &Palette,
 ) {
     let has_filter_visible = filter_buf.is_some() || channel_filter.is_some_and(|f| !f.is_empty());
     let has_command = command_buf.is_some();
@@ -47,21 +48,19 @@ pub fn render(
         &config.header.config_labels(),
         Some(team_name),
         Some(user_name),
+        palette,
     );
 
     // Commands hint on the same row as the poll indicator (last row of header)
-    let mut spans = vec![Span::styled(
-        "commands",
-        Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
-    )];
+    let mut spans = vec![Span::styled("commands", Style::default().fg(palette.accent).add_modifier(Modifier::BOLD))];
     for (prefix, rest) in cli::tui_command_prefixes() {
-        spans.push(Span::styled(format!(" :{}", prefix), Style::default().fg(Color::White)));
-        spans.push(Span::styled(rest, Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD)));
+        spans.push(Span::styled(format!(" :{}", prefix), Style::default().fg(palette.text)));
+        spans.push(Span::styled(rest, Style::default().fg(palette.text_muted).add_modifier(Modifier::BOLD)));
     }
-    spans.push(Span::styled(" /", Style::default().fg(Color::White)));
+    spans.push(Span::styled(" /", Style::default().fg(palette.text)));
     spans.push(Span::styled(
         "#channel",
-        Style::default().fg(Color::DarkGray).add_modifier(Modifier::BOLD),
+        Style::default().fg(palette.text_muted).add_modifier(Modifier::BOLD),
     ));
     let commands_line = Line::from(spans);
     let cmd_area = Rect::new(outer[0].x, outer[0].bottom().saturating_sub(1), outer[0].width, 1);
@@ -89,17 +88,17 @@ pub fn render(
     // Render overlay bars
     let mut overlay_idx: usize = 0;
     if let Some(cbuf) = command_buf {
-        command_bar::render(frame, chunks[overlay_idx], cbuf, command_error, command_error_msg);
+        command_bar::render(frame, chunks[overlay_idx], cbuf, command_error, command_error_msg, palette);
         overlay_idx += 1;
     }
     if has_filter_visible {
         let area = chunks[overlay_idx];
         if let Some(fbuf) = filter_buf {
-            filter_bar::render(frame, area, fbuf, true);
+            filter_bar::render(frame, area, fbuf, true, palette);
         } else if let Some(cf) = channel_filter
             && !cf.is_empty()
         {
-            filter_bar::render(frame, area, cf, false);
+            filter_bar::render(frame, area, cf, false, palette);
         }
     }
 
@@ -107,11 +106,11 @@ pub fn render(
         .iter()
         .map(|m| {
             let mut spans = vec![
-                Span::styled(format!("#{} ", m.channel_name), Style::default().fg(Color::DarkGray)),
-                Span::styled(format!("@{}", m.display_name), Style::default().fg(Color::Rgb(255, 165, 0))),
+                Span::styled(format!("#{} ", m.channel_name), Style::default().fg(palette.text_muted)),
+                Span::styled(format!("@{}", m.display_name), Style::default().fg(palette.accent)),
                 Span::raw(": "),
             ];
-            spans.extend(highlight_spans(&m.text));
+            spans.extend(highlight_spans(&m.text, palette));
             ListItem::new(Line::from(spans))
         })
         .collect();
@@ -206,7 +205,11 @@ pub fn render(
         )
     };
 
-    let list_border_color = if overlay_count > 0 { Color::Blue } else { Color::Cyan };
+    let list_border_color = if overlay_count > 0 {
+        palette.border_overlay
+    } else {
+        palette.border_focused
+    };
     let mut block = Block::default()
         .title(title)
         .borders(Borders::ALL)
@@ -217,7 +220,7 @@ pub fn render(
     }
     let list = List::new(items)
         .block(block)
-        .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+        .highlight_style(Style::default().bg(palette.selection_bg).add_modifier(Modifier::BOLD))
         .highlight_symbol("> ");
 
     frame.render_stateful_widget(list, list_area, list_state);
@@ -225,7 +228,7 @@ pub fn render(
 
 /// Parse \u{E000}...\u{E001} highlight markers in text and return spans
 /// with matched portions styled in orange.
-fn highlight_spans(text: &str) -> Vec<Span<'_>> {
+fn highlight_spans<'a>(text: &'a str, palette: &Palette) -> Vec<Span<'a>> {
     let mut spans = Vec::new();
     let mut rest = text;
     while let Some(start) = rest.find('\u{E000}') {
@@ -236,7 +239,7 @@ fn highlight_spans(text: &str) -> Vec<Span<'_>> {
         if let Some(end) = rest.find('\u{E001}') {
             spans.push(Span::styled(
                 &rest[..end],
-                Style::default().fg(Color::Rgb(255, 165, 0)).add_modifier(Modifier::BOLD),
+                Style::default().fg(palette.accent).add_modifier(Modifier::BOLD),
             ));
             rest = &rest[end + '\u{E001}'.len_utf8()..];
         }

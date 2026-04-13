@@ -2,7 +2,10 @@ pub mod command_bar;
 pub mod filter_bar;
 pub mod header;
 pub mod message_list;
+pub mod palette;
 pub mod splash;
+
+pub use palette::Palette;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Theme {

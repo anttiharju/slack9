@@ -1,18 +1,20 @@
 use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Flex, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style};
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 
+use super::Palette;
+
 const BIG_LOGO: &str = include_str!("splash_logo.txt");
 
-pub fn render(frame: &mut Frame) {
+pub fn render(frame: &mut Frame, palette: &Palette) {
     let area = frame.area();
 
     let lines: Vec<Line> = BIG_LOGO
         .lines()
         .filter(|l| !l.is_empty())
-        .map(|l| Line::from(Span::styled(l, Style::default().fg(Color::Rgb(255, 165, 0)))))
+        .map(|l| Line::from(Span::styled(l, Style::default().fg(palette.accent))))
         .collect();
 
     let logo_height = lines.len() as u16;
@@ -41,8 +43,8 @@ pub fn render(frame: &mut Frame) {
     // Version below logo with 1 row padding, centered
     let version = env!("CARGO_PKG_VERSION");
     let version_line = Line::from(vec![
-        Span::styled("Version ", Style::default().fg(Color::Rgb(0, 206, 209)).add_modifier(Modifier::BOLD)),
-        Span::styled(version, Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)),
+        Span::styled("Version ", Style::default().fg(palette.splash_version_label).add_modifier(Modifier::BOLD)),
+        Span::styled(version, Style::default().fg(palette.splash_version_number).add_modifier(Modifier::BOLD)),
     ]);
     let version_area = Rect::new(horizontal[1].x, vertical[1].y + logo_height + 1, horizontal[1].width, 1);
     let version_paragraph = Paragraph::new(version_line).alignment(ratatui::layout::Alignment::Center);

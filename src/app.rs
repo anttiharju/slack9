@@ -2,7 +2,7 @@ use crate::config::{self, Config};
 use crate::model::{TrackedMessage, effective_category};
 use crate::slack::SlackClient;
 use crate::view;
-use crate::view::Theme;
+use crate::view::Palette;
 use crate::view::header::wave_fraction;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -46,7 +46,7 @@ pub struct App {
     rollup_reactions: bool,
     indirect_mode: u8,
     exclude_enabled: bool,
-    theme: Theme,
+    palette: Palette,
 }
 
 impl Drop for App {
@@ -67,7 +67,7 @@ impl App {
         user_name: String,
         past: Duration,
         poll: Duration,
-        theme: Theme,
+        palette: Palette,
     ) -> Self {
         enable_raw_mode().expect("failed to enable raw mode");
         let mut stdout = io::stdout();
@@ -111,7 +111,7 @@ impl App {
             rollup_reactions,
             indirect_mode,
             exclude_enabled,
-            theme,
+            palette,
         }
     }
 
@@ -119,9 +119,10 @@ impl App {
         // Show splash screen for 1 second
         let splash_start = Instant::now();
         while splash_start.elapsed() < Duration::from_secs(1) {
+            let palette = &self.palette;
             self.terminal
                 .draw(|frame| {
-                    view::splash::render(frame);
+                    view::splash::render(frame, palette);
                 })
                 .expect("failed to draw splash");
             if event::poll(Duration::from_millis(50)).unwrap_or(false) {
@@ -632,6 +633,7 @@ impl App {
             let show_uncategorised = self.show_uncategorised;
             let rollup_reactions = self.rollup_reactions;
             let indirect_mode = self.indirect_mode;
+            let palette = &self.palette;
             self.terminal
                 .draw(|frame| {
                     let area = frame.area();
@@ -654,6 +656,7 @@ impl App {
                         show_uncategorised,
                         rollup_reactions,
                         indirect_mode,
+                        palette,
                     );
                 })
                 .expect("failed to draw");
