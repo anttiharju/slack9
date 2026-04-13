@@ -1,11 +1,12 @@
 [package]
+version = "0.5.4"
+
 license = "MIT"
-description = "slack9 is a template for my Rust projects to make it easier to start new ones."
+description = "🐵 Slack TUI to Track Your Mentions In Style!"
 homepage = "https://anttiharju.dev/slack9/"
 repository = "https://github.com/anttiharju/slack9"
 readme = "docs/README.md"
 name = "slack9"
-version = "0.5.3"
 edition = "2024"
 include = ["src/**", "tests/**"]
 
@@ -20,6 +21,7 @@ jiff = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "1.0"
+termbg = "0.6.2"
 
 [dev-dependencies]
 assert_cmd = "2.2"

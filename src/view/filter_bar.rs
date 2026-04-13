@@ -1,11 +1,13 @@
 use ratatui::Frame;
 use ratatui::layout::Rect;
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Padding, Paragraph};
 
-pub fn render(frame: &mut Frame, area: Rect, buf: &str, focused: bool) {
-    let border_color = if focused { Color::Cyan } else { Color::DarkGray };
+use super::Palette;
+
+pub fn render(frame: &mut Frame, area: Rect, buf: &str, focused: bool, palette: &Palette) {
+    let border_color = if focused { palette.border_focused } else { palette.border_unfocused };
     let spans = vec![Span::raw("/"), Span::raw(buf.to_string())];
     let paragraph = Paragraph::new(Line::from(spans)).block(
         Block::default()

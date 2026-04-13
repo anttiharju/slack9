@@ -73,7 +73,10 @@ fn main() {
         std::process::exit(exitcode::usergroup_load_error());
     });
 
+    let theme = view::Theme::detect();
+    let palette = view::Palette::from_theme(theme);
+
     let user_name = client.resolve_user(&user_id);
-    let app = app::App::new(client, config, team_id, team_name, user_id, user_name, past, poll);
+    let app = app::App::new(client, config, team_id, team_name, user_id, user_name, past, poll, palette);
     app.run();
 }
