@@ -41,31 +41,31 @@ impl Palette {
         Self {
             accent: Color::Rgb(255, 165, 0), // Orange
             text: Color::White,
-            text_muted: Color::DarkGray,
+            text_muted: Color::Gray,
             border_focused: Color::Cyan,
             border_unfocused: Color::DarkGray,
-            border_overlay: Color::Blue,
+            border_overlay: Color::Gray,
             error: Color::Red,
             selection_bg: Color::DarkGray,
             poll_bar: Color::DarkGray,
-            splash_version_label: Color::Rgb(0, 206, 209), // Turquoise
+            splash_version_label: Color::Cyan,
             splash_version_number: Color::Red,
         }
     }
 
     fn light() -> Self {
         Self {
-            accent: Color::Black,
-            text: Color::Black,
-            text_muted: Color::Black,
-            border_focused: Color::Black,
-            border_unfocused: Color::Black,
-            border_overlay: Color::Black,
-            error: Color::Black,
-            selection_bg: Color::Black,
-            poll_bar: Color::Black,
-            splash_version_label: Color::Black,
-            splash_version_number: Color::Black,
+            accent: Color::Rgb(232, 127, 36), // Slighly more dark orange for better contrast on light background
+            text: Color::Rgb(100, 100, 100),  // Medium gray
+            text_muted: Color::Gray,
+            border_focused: Color::Cyan,
+            border_unfocused: Color::White,
+            border_overlay: Color::Gray,
+            error: Color::Red,
+            selection_bg: Color::White,
+            poll_bar: Color::White,
+            splash_version_label: Color::Gray,
+            splash_version_number: Color::LightRed,
         }
     }
 }
