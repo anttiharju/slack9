@@ -2,6 +2,7 @@ use crate::config::{self, Config};
 use crate::model::{TrackedMessage, effective_category};
 use crate::slack::SlackClient;
 use crate::view;
+use crate::view::Theme;
 use crate::view::header::wave_fraction;
 
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -45,6 +46,7 @@ pub struct App {
     rollup_reactions: bool,
     indirect_mode: u8,
     exclude_enabled: bool,
+    theme: Theme,
 }
 
 impl Drop for App {
@@ -65,6 +67,7 @@ impl App {
         user_name: String,
         past: Duration,
         poll: Duration,
+        theme: Theme,
     ) -> Self {
         enable_raw_mode().expect("failed to enable raw mode");
         let mut stdout = io::stdout();
@@ -108,6 +111,7 @@ impl App {
             rollup_reactions,
             indirect_mode,
             exclude_enabled,
+            theme,
         }
     }
 
