@@ -1,12 +1,7 @@
 name: Plan
-permissions:
-  contents: write
-  pull-requests: none
+permissions: {}
 on:
   pull_request:
-    # https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#pull_request
-    # defaults: opened, synchronize, reopened
-    types: [opened, synchronize, reopened, labeled, unlabeled]
   workflow_call:
     outputs:
       version:
@@ -18,11 +13,6 @@ on:
       container:
         description: "Image in which all CI jobs should be ran"
         value: ${{ jobs.container.outputs.image }}
-    secrets:
-      ANTTIHARJU_BOT_ID:
-        required: true
-      ANTTIHARJU_BOT_PRIVATE_KEY:
-        required: true
 
 jobs:
   container:
@@ -52,50 +42,68 @@ jobs:
             accept-flake-config = true
             access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
       - if: steps.flake.outputs.changed == 'true'
-        name: Parse container version
-        id: container
-        run: |
-          version=current
-          echo "version=$version"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-          image_id="ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}-ci"
-          image_id="$(echo "$image_id" | tr '[:upper:]' '[:lower:]')"
-          echo "image_id=$image_id"
-          echo "image_id=$image_id" >> "$GITHUB_OUTPUT"
-      - if: steps.flake.outputs.changed == 'true'
         run: |
           nix build .#ci
       - if: steps.flake.outputs.changed == 'true'
-        run: |
-          ./result | docker load
-      - if: steps.flake.outputs.changed == 'true'
-        name: Tag image
-        id: tag
+        name: Output image information
+        id: container
         env:
-          image_id: ${{ steps.container.outputs.image_id }}
-          version: ${{ steps.container.outputs.version }}
-          latest: ${{ github.event_name == 'pull_request' && steps.container.outputs.version || 'latest' }}
+          owner: ${{ github.repository_owner }}
+          repository: ${{ github.event.repository.name }}
         run: |
-          docker tag "ci:$version" "$image_id:$latest"
-          echo "image=$image_id:$latest"
-          echo "image=$image_id:$latest" >> "$GITHUB_OUTPUT"
+          nix_hash="$(basename "$(readlink ./result)" | cut -d '-' -f1)"
+          echo "nix_hash=$nix_hash"
+          echo "nix_hash=$nix_hash" >> "$GITHUB_OUTPUT"
+
+          image_id="ghcr.io/$owner/$repository-ci"
+          image_id="$(echo "$image_id" | tr '[:upper:]' '[:lower:]')"
+          echo "image_id=$image_id"
+          echo "image_id=$image_id" >> "$GITHUB_OUTPUT"
+
+          image="$image_id:$nix_hash"
+          echo "image=$image"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
       - if: steps.flake.outputs.changed == 'true'
         name: Log in to registry
+        env:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          actor: ${{ github.actor }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+          echo "$github_token" | docker login ghcr.io -u "$actor" --password-stdin
       - if: steps.flake.outputs.changed == 'true'
+        name: Check registry
+        id: image
+        env:
+          image: ${{ steps.container.outputs.image }}
+        run: |
+          if docker manifest inspect "$image" > /dev/null 2>&1; then
+            echo "pushed=true"
+            echo "pushed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.flake.outputs.changed == 'true' && steps.image.outputs.pushed != 'true'
+        run: |
+          ./result | docker load
+      - if: steps.flake.outputs.changed == 'true' && steps.image.outputs.pushed != 'true'
+        name: Tag image
+        env:
+          image: ${{ steps.container.outputs.image }}
+        run: |
+          docker tag ci:flake "$image"
+      - if: steps.flake.outputs.changed == 'true' && steps.image.outputs.pushed != 'true'
         name: Push image
         env:
-          image: ${{ steps.tag.outputs.image }}
+          image: ${{ steps.container.outputs.image }}
         run: |
-          local_digest="$(docker inspect "$image" --format='{{.Id}}')"
-          remote_digest="$(docker manifest inspect "$image" | jq -r '.config.digest')"
-          if [[ "$local_digest" != "$remote_digest" ]]; then
-            docker push "$image"
-          fi
+          docker push "$image"
       - if: steps.flake.outputs.changed == 'true' && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
-        name: Delete untagged versions
+        name: Tag as latest
+        env:
+          image_id: ${{ steps.container.outputs.image_id }}
+          image: ${{ steps.container.outputs.image }}
+        run: |
+          skopeo copy --all "docker://$image" "docker://$image_id:latest"
+      - if: steps.flake.outputs.changed == 'true' && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+        name: Delete previous versions
         uses: actions/delete-package-versions@v5
         with:
           package-name: ${{ github.event.repository.name }}-ci
@@ -103,16 +111,16 @@ jobs:
           min-versions-to-keep: 1
           delete-only-untagged-versions: false
     outputs:
-      image: ${{ steps.tag.outputs.image }}
+      image: ${{ steps.container.outputs.image || format('ghcr.io/{0}/{1}-ci:latest', github.repository_owner, github.event.repository.name) }}
 
   validate:
     name: Validate
     needs: container
     runs-on: ubuntu-24.04
     permissions:
-      contents: write
+      contents: read
     container:
-      image: ${{ needs.container.outputs.image || format('ghcr.io/{0}/{1}-ci:latest', github.repository_owner, github.event.repository.name) }}
+      image: ${{ needs.container.outputs.image }}
       credentials:
         username: ${{ github.actor }}
         password: ${{ github.token }}
@@ -127,23 +135,43 @@ jobs:
         with:
           changes: ${{ steps.changes.outputs.array }}
 
-      - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || steps.changed.outputs.release == 'true' || github.event_name == 'push') && ! endsWith(github.event.head_commit.author.name, '[bot]')
-        id: semantic
-        name: Require semantic version label
-        uses: ./.github/actions/semver-label
-        with:
-          require: ${{ steps.changed.outputs.rust == 'true' || steps.changed.outputs.release == 'true' }}
+      - if: steps.changed.outputs.rust == 'true' || steps.changed.outputs.release == 'true' || github.event_name == 'push'
+        id: version
+        name: Detect version from Cargo.toml
+        env:
+          GH_TOKEN: ${{ github.token }}
+          event_name: ${{ github.event_name }}
+        run: |
+          cargo_version="v$(toml get Cargo.toml package.version --raw)"
+          echo "cargo_version=$cargo_version"
+          latest_tag=$(gh api "repos/{owner}/{repo}/releases/latest" --jq '.tag_name' || echo "")
+          echo "latest_tag=$latest_tag"
+          if [[ "$cargo_version" == "$latest_tag" ]]; then
+            if [[ "$event_name" == "push" ]]; then
+              echo "Cargo.toml version ($cargo_version) matches latest release. No release needed."
+              exit 0
+            fi
+            echo "::error::Cargo.toml version ($cargo_version) was not bumped even though files determined by rust and release wildcards have changed."
+            exit 1
+          fi
+          echo "cargo=${cargo_version#v}" >> "$GITHUB_OUTPUT"
+
+          cargo_major="${cargo_version%%.*}"
+          latest_major="${latest_tag%%.*}"
+          if [[ "$cargo_major" != "$latest_major" ]]; then
+            echo "major=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || github.event_name == 'push')
         name: Cache
         uses: ./.github/actions/cache
 
       - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || github.event_name == 'push')
-        run: cargo build --all-features --target aarch64-apple-darwin
+        run: cargo build --locked --all-features --target aarch64-apple-darwin
       - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || github.event_name == 'push')
-        run: cargo build --all-features --target aarch64-unknown-linux-musl
+        run: cargo build --locked --all-features --target aarch64-unknown-linux-musl
       - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || github.event_name == 'push')
-        run: cargo build --all-features --target x86_64-unknown-linux-musl
+        run: cargo build --locked --all-features --target x86_64-unknown-linux-musl
 
       - if: always() && !cancelled() && (steps.changed.outputs.rust == 'true' || github.event_name == 'push')
         run: cargo test --all-features
@@ -203,36 +231,10 @@ jobs:
         run: |
           git ls-files -z '*.sh' | xargs --null shellcheck --color=always
 
-      - if: steps.semantic.outputs.version != '' && github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && !endsWith(github.event.head_commit.author.name, '[bot]')
-        name: Create release commit
-        uses: ./.github/actions/commit-release
-        with:
-          version: ${{ steps.semantic.outputs.version }}
-          ANTTIHARJU_BOT_ID: ${{ secrets.ANTTIHARJU_BOT_ID }}
-          ANTTIHARJU_BOT_PRIVATE_KEY: ${{ secrets.ANTTIHARJU_BOT_PRIVATE_KEY }}
-
-      - if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch && endsWith(github.event.head_commit.author.name, '[bot]')
-        id: parse
-        name: Parse release commit
-        env:
-          expected_bot: ${{ github.event.head_commit.author.name }}
+      - if: always() && !cancelled() && (steps.changed.outputs.zizmor == 'true' || github.event_name == 'push')
+        name: zizmor
         run: |
-          commit_author="$(git log -1 --pretty=format:'%an')"
-          commit_committer="$(git log -1 --pretty=format:'%cn')"
-
-          if [[ "$commit_author" == "$expected_bot" && "$commit_committer" == "$expected_bot" ]]; then
-            commit_message="$(git log -1 --pretty=format:'%s')"
-            version="${commit_message%% *}"
-            if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-              echo "version=$version"
-              echo "version=$version" >> "$GITHUB_OUTPUT"
-            else
-              echo "Commit message does not match semver format: $commit_message"
-            fi
-          else
-            echo "Author or committer does not match expected bot: $expected_bot"
-            echo "Author: $commit_author, Committer: $commit_committer"
-          fi
+          zizmor .
     outputs:
-      version: ${{ steps.semantic.outputs.version || steps.parse.outputs.version }}
+      version: ${{ steps.version.outputs.cargo }}
       documentation_changed: ${{ steps.changed.outputs.zensical }}

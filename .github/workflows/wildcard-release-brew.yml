@@ -1,6 +1,4 @@
-permissions:
-  contents: none
-  pull-requests: none
+permissions: {}
 on:
   push:
     branches:
@@ -9,7 +7,7 @@ on:
       - ".release/brew/**"
       - "flake.nix"
       - "flake.lock"
-      - ".github/workflows/wildcard-brew.yml"
+      - ".github/workflows/wildcard-release-brew.yml"
 jobs:
   wildcard:
     runs-on: ubuntu-latest

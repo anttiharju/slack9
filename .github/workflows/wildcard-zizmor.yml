@@ -1,15 +1,14 @@
-permissions:
-  contents: none
-  pull-requests: none
+permissions: {}
 on:
   push:
     branches:
       - wildcard
     paths:
-      - ".release/nix/**"
-      - "flake.nix"
+      - "**/action.yml"
+      - ".github/workflows/*.yml"
+      - ".github/workflows/wildcard-zizmor.yml"
       - "flake.lock"
-      - ".github/workflows/wildcard-nix.yml"
+      - "flake.nix"
 jobs:
   wildcard:
     runs-on: ubuntu-latest
