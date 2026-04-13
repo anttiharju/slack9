@@ -1,5 +1,5 @@
 [package]
-version = "0.5.3"
+version = "0.5.4"
 
 license = "MIT"
 description = "🐵 Slack TUI to Track Your Mentions In Style!"
