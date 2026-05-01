@@ -1,4 +1,4 @@
-name: Dependabot bump
+name: Dependabot
 permissions: {}
 on:
   push:
